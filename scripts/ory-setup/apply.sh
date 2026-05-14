@@ -44,4 +44,8 @@ echo "Configuring allowed return URLs..."
 "${DIR}/return-urls.sh"
 echo "  → OK"
 
+echo "Configuring Keto namespaces..."
+"${DIR}/keto-config.sh"
+echo "  → OK"
+
 echo "All Ory project configuration applied."

@@ -6,7 +6,10 @@ const baseUrl = process.env.ORY_SDK_URL;
 const apiKey = process.env.ORY_ADMIN_API_KEY ?? process.env.ORY_API_KEY;
 if (!baseUrl) throw new Error("ORY_SDK_URL is not set");
 
-const config = new Configuration({ basePath: baseUrl, accessToken: apiKey });
+const config = new Configuration({
+  basePath: baseUrl,
+  baseOptions: { headers: { Authorization: `Bearer ${apiKey}` } },
+});
 const permissionApi = new PermissionApi(config);
 const relationshipApi = new RelationshipApi(config);
 
