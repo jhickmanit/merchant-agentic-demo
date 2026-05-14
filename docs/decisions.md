@@ -4,18 +4,20 @@ ADRs are short. Lead with the decision. Capture context and consequences in 1–
 
 ---
 
-## ADR-001: `@ory/mcp-access-control` — adopt / fork / inline
-**Status:** _TBD (filled in Task 11)_
-**Date:** 2026-05-13
+## ADR-001: `@ory/mcp-access-control` — inline
+**Status:** Accepted
+**Date:** 2026-05-14
 
 ### Decision
-TBD.
+Do not depend on `@ory/mcp-access-control`. Write the equivalent ~50 LOC inline in `lib/auth/mcp-gate.ts` in Phase 5.
 
 ### Context
-The Skyfire reference demo (`skyfire-xyz/skyfire-solutions-demo`) uses `@ory/mcp-access-control` to gate the merchant MCP server: parse a bearer JWT, validate against Hydra's JWKS, check Keto. Maturity, last-published date, and shape are unknown.
+The package does not exist on npm (HTTP 404 for `@ory/mcp-access-control`; no match under `@ory/mcp` or any search variant). The Skyfire reference demo (`skyfire-xyz/skyfire-solutions-demo` at commit `ede643c`) ships a vendored copy under `mcp-servers/dappier-seller-server/lib/@ory/mcp-access-control/` (v0.1.0, Apache-2.0, never published). Inspecting its `src/index.ts` reveals the exported `McpAccessControl` class targets Ory **Kratos** identity management (`FrontendApi.toSession()`, `IdentityApi.createIdentity()`) — not Hydra JWKS validation + Keto permission checks. Its `getToolDefinition()` registers an `ory_access_control` MCP tool for user registration/login flows, and `validateSession()` validates Kratos session tokens via the `x-session-token` header. This shape does not match our `OryPermissionProvider` interface, which requires: bearer JWT → Hydra JWKS verify → Keto `checkPermission(namespace, object, relation, subject)`. Investigated: npm registry, `pnpm search`, GitHub `ory` org (no `mcp-access-control` repo), and the skyfire-xyz reference repo source.
 
 ### Consequences
-TBD.
+- One fewer external dependency; no npm install risk.
+- We write and own the JWT+Keto gate ourselves (~50 LOC in `lib/auth/mcp-gate.ts`).
+- Our gate uses `jose` (already in the dependency tree) for JWKS verification and `@ory/client-fetch` for Keto `checkPermission` calls, matching the actual Ory stack we're deploying.
 
 ---
 
