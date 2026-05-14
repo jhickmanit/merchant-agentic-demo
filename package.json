@@ -15,7 +15,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx db/seed.ts"
+    "db:seed": "tsx db/seed.ts",
+    "backfill:tuples": "tsx scripts/backfill-order-tuples.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
