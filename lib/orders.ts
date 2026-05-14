@@ -2,11 +2,14 @@ import { nanoid } from "nanoid";
 import { desc, eq, sql } from "drizzle-orm";
 import type { DB } from "@/db";
 import { orders, orderItems, cartItems } from "@/db/schema";
+import type { PermissionProvider } from "@/lib/auth/permissions";
 
 export async function createOrderFromCart(
   db: DB,
   cartId: string,
+  userId: string,
   paymentMethod: "stub" | "kyapay",
+  opts?: { permissions?: PermissionProvider },
 ): Promise<string> {
   const lines = await db.query.cartItems.findMany({
     where: eq(cartItems.cartId, cartId),
@@ -24,6 +27,7 @@ export async function createOrderFromCart(
     tx.insert(orders).values({
       id,
       cartId,
+      userId,
       paymentMethod,
       subtotalCents: subtotal,
     }).run();
@@ -35,9 +39,21 @@ export async function createOrderFromCart(
         priceCentsAtPurchase: l.product.priceCents,
       })),
     ).run();
-    // clear cart
     tx.delete(cartItems).where(eq(cartItems.cartId, cartId)).run();
   });
+
+  // Write Keto tuples — best-effort. Ory Network's hosted Keto requires
+  // BOTH owner and view tuples (it doesn't enforce OPL computed permits).
+  if (opts?.permissions) {
+    const subject = `User:${userId}`;
+    try {
+      await opts.permissions.addTuple({ namespace: "Order", object: id, relation: "owner", subject });
+      await opts.permissions.addTuple({ namespace: "Order", object: id, relation: "view", subject });
+    } catch (err) {
+      console.error(`Failed to write Keto tuples for order ${id}:`, err);
+    }
+  }
+
   return id;
 }
 
@@ -57,6 +73,14 @@ export async function listOrdersForCart(db: DB, cartId: string) {
   return db.query.orders.findMany({
     where: eq(orders.cartId, cartId),
     orderBy: [desc(orders.createdAt), desc(sql`rowid`)],
+    with: { items: { with: { product: true } } },
+  });
+}
+
+export async function listOrdersForUser(db: DB, userId: string) {
+  return db.query.orders.findMany({
+    where: eq(orders.userId, userId),
+    orderBy: [desc(orders.createdAt)],
     with: { items: { with: { product: true } } },
   });
 }
