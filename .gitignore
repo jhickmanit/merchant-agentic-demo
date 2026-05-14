@@ -35,6 +35,8 @@ test-results/
 *.sqlite-journal
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 
 # logs
 *.log
