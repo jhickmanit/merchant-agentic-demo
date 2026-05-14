@@ -212,7 +212,7 @@ Expected: prints `OK`. If `FAIL`, check the dev-server output for errors.
 Run:
 ```bash
 pnpm exec tsc --noEmit
-pnpm exec next lint
+pnpm lint
 ```
 
 Expected: both exit code 0.
@@ -1117,7 +1117,7 @@ jobs:
 
       - run: pnpm exec tsc --noEmit
 
-      - run: pnpm exec next lint
+      - run: pnpm lint
 
       - run: pnpm test
 
@@ -1133,7 +1133,7 @@ Run:
 ```bash
 pnpm install --frozen-lockfile
 pnpm exec tsc --noEmit
-pnpm exec next lint
+pnpm lint
 pnpm test
 pnpm test:e2e
 ```
@@ -1225,7 +1225,7 @@ Run:
 ```bash
 pnpm install --frozen-lockfile
 pnpm exec tsc --noEmit
-pnpm exec next lint
+pnpm lint
 pnpm test
 pnpm test:e2e
 ```
