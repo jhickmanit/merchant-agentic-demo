@@ -26,8 +26,8 @@ describe("cartTotalFromLines", () => {
 
   it("sums quantity × product.priceCents", () => {
     const lines: CartLineWithProduct[] = [
-      { quantity: 2, product: { priceCents: 1999 } as any },
-      { quantity: 3, product: { priceCents: 500 } as any },
+      { quantity: 2, product: { priceCents: 1999 } },
+      { quantity: 3, product: { priceCents: 500 } },
     ];
     expect(cartTotalFromLines(lines)).toBe(1999 * 2 + 500 * 3);
   });
