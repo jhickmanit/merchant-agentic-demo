@@ -11,9 +11,14 @@ export class OrySessionProvider implements SessionProvider {
     const cookie = req.cookies.get(this.cookieName);
     if (!cookie) return null;
     try {
-      const result = await frontend.toSession({
-        cookie: `${this.cookieName}=${cookie.value}`,
-      });
+      // Session tokens (from native login flows, e.g. e2e test fixtures) start with "ory_st_".
+      // Try xSessionToken first for those, then fall back to cookie-based validation.
+      const isSessionToken = cookie.value.startsWith("ory_st_");
+      const result = await frontend.toSession(
+        isSessionToken
+          ? { xSessionToken: cookie.value }
+          : { cookie: `${this.cookieName}=${cookie.value}` },
+      );
       const s = result.data;
       const traits = (s.identity?.traits ?? {}) as { email: string; name?: { first?: string; last?: string } };
       const name = [traits.name?.first, traits.name?.last].filter(Boolean).join(" ").trim();
