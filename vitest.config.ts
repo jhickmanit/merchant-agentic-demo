@@ -8,6 +8,7 @@ export default defineConfig({
     environment: "node",
     include: ["lib/**/*.test.ts", "lib/**/*.test.tsx"],
     globals: false,
+    env: { AUTH_PROVIDER: "memory" },
   },
   resolve: {
     alias: {
