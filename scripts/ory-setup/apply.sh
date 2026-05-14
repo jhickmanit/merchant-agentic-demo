@@ -40,4 +40,8 @@ RESULT=$(ory update identity-config \
 SCHEMA_ID=$(echo "${RESULT}" | jq -r '.identity.default_schema_id' 2>/dev/null || echo "(unavailable)")
 echo "  → OK (schema id: ${SCHEMA_ID})"
 
+echo "Configuring allowed return URLs..."
+"${DIR}/return-urls.sh"
+echo "  → OK"
+
 echo "All Ory project configuration applied."
