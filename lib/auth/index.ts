@@ -5,6 +5,18 @@ import type { PermissionProvider } from "./permissions";
 import { MemoryIdentityProvider } from "./memory/identity";
 import { MemorySessionProvider } from "./memory/sessions";
 import { MemoryPermissionProvider } from "./memory/permissions";
+import { recordCheck } from "@/lib/permissions-debug";
+
+function instrumentPermissions<T extends PermissionProvider>(p: T): T {
+  const original = p.check.bind(p);
+  p.check = async (args) => {
+    const start = performance.now();
+    const allowed = await original(args);
+    recordCheck({ ...args, allowed, durationMs: Math.round(performance.now() - start) });
+    return allowed;
+  };
+  return p;
+}
 
 type Providers = {
   identity: IdentityProvider;
@@ -21,7 +33,7 @@ export function getAuth(): Providers {
   if (which === "memory") {
     const identity = new MemoryIdentityProvider();
     const session = new MemorySessionProvider(identity);
-    const permission = new MemoryPermissionProvider();
+    const permission = instrumentPermissions(new MemoryPermissionProvider());
     cached = { identity, session, permission };
     return cached;
   }
@@ -39,7 +51,7 @@ export function getAuth(): Providers {
     cached = {
       identity: new OryIdentityProvider(),
       session: new OrySessionProvider(),
-      permission: new OryPermissionProvider(),
+      permission: instrumentPermissions(new OryPermissionProvider()),
     };
     return cached;
   }
