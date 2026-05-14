@@ -6,7 +6,7 @@
 
 **Architecture:** Pure scaffolding phase. No business logic, no auth, no agents. Each task produces one committed, working unit. End state: `pnpm dev` serves a styled "Hello" page on port 3000, `pnpm test` runs one Vitest unit test, `pnpm test:e2e` runs one Playwright smoke test, `pnpm typecheck` passes, and `ory list project` confirms the CLI is pointing at the right Ory project.
 
-**Tech Stack:** Node 22 LTS · pnpm · Next.js 15 (App Router) · React 19 · Tailwind v4 · shadcn/ui · Drizzle ORM · better-sqlite3 · Vitest · Playwright · GitHub Actions · `ory` CLI
+**Tech Stack:** Node 25.9.0 (via fnm + `.node-version`) · pnpm 11.x · Next.js 15 (App Router) · React 19 · Tailwind v4 · shadcn/ui · Drizzle ORM · better-sqlite3 · Vitest · Playwright · GitHub Actions · `ory` CLI
 
 **Parent plan:** [`docs/plans/2026-05-13-architecture-and-roadmap.md`](../2026-05-13-architecture-and-roadmap.md)
 
@@ -24,6 +24,7 @@
 .
 ├── .github/workflows/ci.yml
 ├── .gitignore
+├── .node-version                 (pins to 25.9.0 — fnm reads this)
 ├── .env.example
 ├── .env.local                    (gitignored; created by Task 8)
 ├── README.md
@@ -66,20 +67,24 @@
 ## Task 1: Pre-flight & repo init
 
 **Files:**
-- Create: `.gitignore`
+- Create: `.gitignore`, `.node-version`
 
 - [ ] **Step 1: Verify tool versions**
 
 Run:
 ```bash
+eval "$(fnm env --use-on-cd)"
+cd /Users/jeff.hickman/Code/demos/merchant-agentic-demo
 node --version
 pnpm --version
 ory version
 ```
 
-Expected: `node --version` ≥ v22.x, `pnpm --version` ≥ 9.x, `ory version` prints a version string (no auth error).
+Expected: `node --version` prints `v25.9.0`, `pnpm --version` prints `11.x`, `ory version` prints a version string (no auth error).
 
-If any are missing: install via `brew install node pnpm ory/tap/cli`, then `ory auth`.
+If `.node-version` doesn't already exist, write it: `echo "25.9.0" > .node-version`.
+
+If any tool is missing: report BLOCKED.
 
 - [ ] **Step 2: Initialize git**
 
@@ -144,8 +149,8 @@ pnpm-debug.log*
 
 Run:
 ```bash
-git add .gitignore docs/
-git commit -m "chore: repo init with .gitignore and existing planning docs"
+git add .gitignore .node-version docs/
+git commit -m "chore: repo init with .gitignore, .node-version, and existing planning docs"
 ```
 
 Expected: commit succeeds; `git log --oneline` shows one commit.
@@ -1105,7 +1110,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
