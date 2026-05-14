@@ -20,7 +20,8 @@ Next.js 16 (App Router) · React 19 · Tailwind v4 · shadcn/ui · Drizzle + SQL
 pnpm install
 cp .env.example .env.local
 # Edit .env.local — set ORY_ADMIN_API_KEY from the Ory console (Project Settings → API Keys)
-pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
 ```
 
 ## Run
