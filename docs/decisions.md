@@ -21,18 +21,21 @@ The package does not exist on npm (HTTP 404 for `@ory/mcp-access-control`; no ma
 
 ---
 
-## ADR-002: `@skyfire-xyz/skyfire-seller-sdk-node` — adopt / fork / inline
-**Status:** _TBD (filled in Task 12)_
-**Date:** 2026-05-13
+## ADR-002: `@skyfire-xyz/skyfire-seller-sdk-node` — adopt
+**Status:** Accepted
+**Date:** 2026-05-14
 
 ### Decision
-TBD.
+Adopt `@skyfire-xyz/skyfire-seller-sdk-node@0.0.6` for Phase 8 Skyfire integration.
 
 ### Context
-Skyfire's official seller SDK exposes `validate(token)` and `chargeToken(token, amount)`. We need to confirm the shapes match our `KyaPayProvider` interface and that the package is actively maintained.
+Package exists on npm (MIT, latest 0.0.6, published 2025-08-01, repo: https://github.com/skyfire-xyz/skyfire-seller-sdk-node). Probed by installing in a scratch dir and reading the compiled build directly. Exported symbols: `validate(token, validationOptions?, jwtValidationOptions?)` and `chargeToken(token, amount)`, plus helpers `loadJWKSet()`, `getJWKSUrl()`, `getSkyfireIssuer()`, `getSkyfireAPIHost()`, `getSkyfireAPIKey()`. These match our `SkyfireKyaPayProvider.verify()` and `.charge()` shape exactly. JWKS rotation is handled internally via `jose.createRemoteJWKSet` with an in-process cache; callers may call `loadJWKSet()` to pre-warm or refresh. The SDK supports `kya+JWT`, `pay+JWT`, and `kya+pay+JWT` token types. One cosmetic bug noted: `config.js` reads `SKYFIRE_ISUER` (typo, missing 'S') instead of the documented `SKYFIRE_ISSUER`; the default value (`https://app.skyfire.xyz`) is correct so this only matters if overriding the issuer via env var. Five maintainers from Skyfire core team are listed.
 
 ### Consequences
-TBD.
+- Phase 8 integration is a thin adapter — `SkyfireKyaPayProvider` wraps `validate()` and `chargeToken()` with no protocol implementation needed.
+- Set `SKYFIRE_API_KEY` (required) and optionally `SKYFIRE_API_HOST` / `SKYFIRE_JWKS_URL`; issuer override requires the corrected env var name `SKYFIRE_ISSUER` once the SDK typo is fixed upstream.
+- Track the package for security updates; the `jose` dependency (`^6.0.12`) and `openapi-fetch` (`^0.14.0`) are both actively maintained.
+- If the `SKYFIRE_ISUER` typo causes integration pain before an upstream fix, patch with a one-line `process.env.SKYFIRE_ISUER = process.env.SKYFIRE_ISSUER` shim in bootstrap.
 
 ---
 
