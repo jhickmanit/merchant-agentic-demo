@@ -6,7 +6,7 @@ A reference integration showcasing **Ory** (identity, OAuth2, permissions) and *
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · Tailwind v4 · shadcn/ui · Drizzle + SQLite · Vitest · Playwright · Ory Network · Skyfire KYAPay (Phase 8+)
+Next.js 16 (App Router) · React 19 · Tailwind v4 · shadcn/ui · Drizzle + SQLite · Vitest · Playwright · Ory Kratos (sessions) · Ory Keto (permissions) · Ory Network · Skyfire KYAPay (Phase 8+)
 
 ## Prereqs
 
@@ -33,6 +33,25 @@ pnpm test:e2e     # Playwright e2e tests
 pnpm exec tsc --noEmit   # Typecheck
 pnpm lint         # ESLint
 ```
+
+## Sign in
+
+Anonymous browsing works without an account. To check out (or visit `/cart`, `/orders`, or `/me`), you must sign in.
+
+Sign-in is hosted by **Ory Account Experience** at the project's URL. For local development against the hosted UI you'll need **Ory Tunnel** to avoid cross-domain cookie issues:
+
+```bash
+# In a separate terminal, with pnpm dev already running on :3000:
+ory tunnel --project f5798507-b1c0-4168-9fd8-7eeb7a40d75c http://localhost:3000
+```
+
+The tunnel proxies Ory under the same origin as your app (defaults to `http://localhost:4000`), so the Kratos session cookie can be set on the right domain.
+
+**Without the tunnel:** the e2e tests work (they use session-token injection — see `e2e/fixtures/test-identity.ts`), but interactive sign-in via the hosted UI will fail with a redirect loop. See `docs/decisions.md` once Phase 10 polish adds the production custom-domain path.
+
+### Test users for e2e
+
+The e2e suite (`pnpm test:e2e`) creates throwaway test identities via the Ory admin API and deletes them on teardown. Requires `ORY_ADMIN_API_KEY` (or `ORY_API_KEY`) set in `.env.local`.
 
 ## Architecture & roadmap
 
