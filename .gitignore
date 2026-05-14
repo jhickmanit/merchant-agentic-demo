@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnp.*
+.yarn/
+
+# next
+.next/
+out/
+build/
+next-env.d.ts
+
+# env
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# test
+coverage/
+playwright-report/
+test-results/
+.playwright/
+
+# db
+*.sqlite
+*.sqlite-journal
+*.db
+*.db-journal
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
