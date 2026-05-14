@@ -1,7 +1,8 @@
 import { test, expect } from "@playwright/test";
 
-test("landing page renders heading and CTA", async ({ page }) => {
+test("landing page renders categories and featured products", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Merchant Agentic Demo" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Get started" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Outdoor gear for trail/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shop by category" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Featured" })).toBeVisible();
 });
