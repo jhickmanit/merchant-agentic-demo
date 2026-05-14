@@ -13,3 +13,12 @@ export function cartTotal(items: CartLine[]): number {
   }
   return total;
 }
+
+export interface CartLineWithProduct {
+  quantity: number;
+  product: { priceCents: number };
+}
+
+export function cartTotalFromLines(lines: CartLineWithProduct[]): number {
+  return lines.reduce((sum, l) => sum + l.product.priceCents * l.quantity, 0);
+}
