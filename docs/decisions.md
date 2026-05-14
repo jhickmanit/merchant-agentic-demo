@@ -40,14 +40,15 @@ Package exists on npm (MIT, latest 0.0.6, published 2025-08-01, repo: https://gi
 ---
 
 ## ADR-003: `ory` CLI authentication & target project
-**Status:** _TBD (filled in Task 13)_
-**Date:** 2026-05-13
+**Status:** Accepted
+**Date:** 2026-05-14
 
 ### Decision
-TBD.
+The `ory` CLI on the dev machine is authed against the account that owns project `f5798507-b1c0-4168-9fd8-7eeb7a40d75c`. Config-as-code in `scripts/ory-setup/` will use this CLI from Phase 2 onward.
 
 ### Context
-Jeff provisioned an Ory Network project (`f5798507-b1c0-4168-9fd8-7eeb7a40d75c`, SDK URL `https://eager-dhawan-mio9f9ilcu.projects.oryapis.com`) and installed/authed the `ory` CLI. We need to confirm the CLI is pointed at this project before we lean on it for config-as-code in Phase 2 onward.
+Verified via `ory list projects` and `ory get project f5798507-b1c0-4168-9fd8-7eeb7a40d75c`. Project slug `eager-dhawan-mio9f9ilcu` and project name `SkyfireOryDemo`. `scripts/ory-setup/apply.sh` runs cleanly with the expected no-op output.
 
 ### Consequences
-TBD.
+- Phase 2/3/4/7 config changes ship as committed CLI invocations.
+- CI does not need Ory creds — config-as-code is dev-machine-driven; CI uses `MemoryX` providers for tests.
