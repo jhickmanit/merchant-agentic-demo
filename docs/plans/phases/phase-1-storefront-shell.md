@@ -296,9 +296,7 @@ export const cartItems = sqliteTable(
       .references(() => products.id),
     quantity: integer("quantity").notNull(),
   },
-  (t) => ({
-    pk: primaryKey({ columns: [t.cartId, t.productId] }),
-  })
+  (t) => [primaryKey({ columns: [t.cartId, t.productId] })]
 );
 
 export const cartsRelations = relations(carts, ({ many }) => ({
@@ -360,9 +358,7 @@ export const orderItems = sqliteTable(
     quantity: integer("quantity").notNull(),
     priceCentsAtPurchase: integer("price_cents_at_purchase").notNull(),
   },
-  (t) => ({
-    pk: primaryKey({ columns: [t.orderId, t.productId] }),
-  })
+  (t) => [primaryKey({ columns: [t.orderId, t.productId] })]
 );
 
 // stub for phase 4 — not used in phase 1
