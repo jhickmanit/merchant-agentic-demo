@@ -27,3 +27,10 @@ export interface Agent {
   kyaCredentialId?: string;
   attestationUrl?: string;
 }
+
+export interface OAuth2Client {
+  id: string;
+  ownerIdentityId: string;
+  grantTypes: string[];
+  metadata: Record<string, string | number | boolean>;
+}

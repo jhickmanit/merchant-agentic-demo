@@ -1,4 +1,4 @@
-import { Configuration, FrontendApi, IdentityApi } from "@ory/client";
+import { Configuration, FrontendApi, IdentityApi, OAuth2Api } from "@ory/client";
 
 const baseUrl = process.env.ORY_SDK_URL;
 // Support both ORY_ADMIN_API_KEY (preferred, per .env.example) and ORY_API_KEY
@@ -15,4 +15,5 @@ const adminConfig = new Configuration({
 
 export const frontend = new FrontendApi(frontendConfig);
 export const identityAdmin = new IdentityApi(adminConfig);
+export const oauth2Admin = new OAuth2Api(adminConfig);
 export { adminConfig };

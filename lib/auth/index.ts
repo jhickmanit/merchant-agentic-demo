@@ -1,10 +1,12 @@
 import type { IdentityProvider } from "./identity";
 import type { SessionProvider } from "./sessions";
 import type { PermissionProvider } from "./permissions";
+import type { OAuth2ClientProvider } from "./oauth2-clients";
 
 import { MemoryIdentityProvider } from "./memory/identity";
 import { MemorySessionProvider } from "./memory/sessions";
 import { MemoryPermissionProvider } from "./memory/permissions";
+import { MemoryOAuth2ClientProvider } from "./memory/oauth2-clients";
 import { recordCheck } from "@/lib/permissions-debug";
 
 function instrumentPermissions<T extends PermissionProvider>(p: T): T {
@@ -22,6 +24,7 @@ type Providers = {
   identity: IdentityProvider;
   session: SessionProvider;
   permission: PermissionProvider;
+  oauth2: OAuth2ClientProvider;
 };
 
 let cached: Providers | null = null;
@@ -34,7 +37,8 @@ export function getAuth(): Providers {
     const identity = new MemoryIdentityProvider();
     const session = new MemorySessionProvider(identity);
     const permission = instrumentPermissions(new MemoryPermissionProvider());
-    cached = { identity, session, permission };
+    const oauth2 = new MemoryOAuth2ClientProvider();
+    cached = { identity, session, permission, oauth2 };
     return cached;
   }
 
@@ -48,10 +52,13 @@ export function getAuth(): Providers {
     const { OrySessionProvider } = require("./ory/sessions");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { OryPermissionProvider } = require("./ory/permissions");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { OryOAuth2ClientProvider } = require("./ory/oauth2-clients");
     cached = {
       identity: new OryIdentityProvider(),
       session: new OrySessionProvider(),
       permission: instrumentPermissions(new OryPermissionProvider()),
+      oauth2: new OryOAuth2ClientProvider(),
     };
     return cached;
   }
