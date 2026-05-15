@@ -98,11 +98,16 @@ export const orderItems = sqliteTable(
   (t) => [primaryKey({ columns: [t.orderId, t.productId] })]
 );
 
-// stub for phase 4 — not used in phase 1
 export const agents = sqliteTable("agents", {
   id: text("id").primaryKey(),
   displayName: text("display_name").notNull(),
-  ownerUserId: text("owner_user_id"),
+  ownerUserId: text("owner_user_id").notNull(),
+  agentType: text("agent_type", { enum: ["shopping", "research", "general"] }).notNull(),
+  hydraClientId: text("hydra_client_id").notNull(),
+  spendCapCents: integer("spend_cap_cents"),
+  expiresAt: integer("expires_at", { mode: "timestamp" }),
+  allowedMerchantsJson: text("allowed_merchants_json"),
+  revokedAt: integer("revoked_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

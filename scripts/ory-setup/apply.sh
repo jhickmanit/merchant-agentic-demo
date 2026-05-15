@@ -16,19 +16,20 @@ echo "  → OK"
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "Uploading user identity schema..."
+echo "Uploading user + agent identity schemas..."
 # Ory Network stores uploaded schemas in GCS and assigns a content-hash as the schema ID.
-# We upload the schema via 'ory update identity-config', which merges it into the project.
-# After upload, the schema's ID is a SHA hash of its content; we capture it and set it as default.
+# We upload both schemas via 'ory update identity-config', which merges them into the project.
+# After upload, schema IDs are SHA hashes of their content; we set 'user' as the default.
 USER_SCHEMA_B64=$(base64 -i "${DIR}/identity-schemas/user.schema.json" | tr -d '\n')
+AGENT_SCHEMA_B64=$(base64 -i "${DIR}/identity-schemas/agent.schema.json" | tr -d '\n')
 
 TMPFILE=$(mktemp /tmp/ory-identity-config-XXXXXX.json)
 trap 'rm -f "${TMPFILE}"' EXIT
 
-# Get current config, inject our schema (replacing schemas list and setting default)
+# Get current config, inject both schemas (replacing schemas list and setting default to 'user')
 ory get identity-config --project "${ORY_PROJECT_ID}" --format json \
-  | jq --arg b64 "${USER_SCHEMA_B64}" \
-    '.identity.schemas = [{"id": "user", "url": ("base64://" + $b64)}] | .identity.default_schema_id = "user"' \
+  | jq --arg user_b64 "${USER_SCHEMA_B64}" --arg agent_b64 "${AGENT_SCHEMA_B64}" \
+    '.identity.schemas = [{"id": "user", "url": ("base64://" + $user_b64)}, {"id": "agent", "url": ("base64://" + $agent_b64)}] | .identity.default_schema_id = "user"' \
   > "${TMPFILE}"
 
 RESULT=$(ory update identity-config \
@@ -38,7 +39,8 @@ RESULT=$(ory update identity-config \
 
 # Ory Network normalises the schema ID to its content hash; capture that hash.
 SCHEMA_ID=$(echo "${RESULT}" | jq -r '.identity.default_schema_id' 2>/dev/null || echo "(unavailable)")
-echo "  → OK (schema id: ${SCHEMA_ID})"
+SCHEMA_COUNT=$(echo "${RESULT}" | jq -r '.identity.schemas | length' 2>/dev/null || echo "(unavailable)")
+echo "  → OK (default schema id: ${SCHEMA_ID}, total schemas: ${SCHEMA_COUNT})"
 
 echo "Configuring allowed return URLs..."
 "${DIR}/return-urls.sh"

@@ -1,0 +1,40 @@
+{
+  "$id": "https://schemas.merchant-agentic-demo.example/agent.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent",
+  "type": "object",
+  "properties": {
+    "traits": {
+      "type": "object",
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "title": "Agent ID"
+        },
+        "owner_identity_id": {
+          "type": "string",
+          "title": "Owner Kratos identity ID"
+        },
+        "agent_type": {
+          "type": "string",
+          "enum": ["shopping", "research", "general"],
+          "title": "Agent type"
+        },
+        "display_name": {
+          "type": "string",
+          "title": "Display name"
+        },
+        "kya_credential_id": {
+          "type": "string",
+          "title": "KYA credential id (Phase 6)"
+        },
+        "attestation_url": {
+          "type": "string",
+          "title": "Attestation URL (Phase 6)"
+        }
+      },
+      "required": ["owner_identity_id", "agent_type", "display_name"],
+      "additionalProperties": false
+    }
+  }
+}
