@@ -16,16 +16,21 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed.ts",
-    "backfill:tuples": "tsx scripts/backfill-order-tuples.ts"
+    "backfill:tuples": "tsx scripts/backfill-order-tuples.ts",
+    "demo:agent-mcp": "tsx scripts/demo-agent-mcp.ts",
+    "demo:agent-browser": "tsx scripts/demo-agent-browser.ts",
+    "demo:mint-agent-token": "tsx scripts/mint-agent-token.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@ory/client": "^1.22.37",
     "@ory/keto-client": "^26.2.0",
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "jose": "^6.2.3",
     "lucide-react": "^1.14.0",
     "nanoid": "^5.1.11",
     "next": "16.2.6",
