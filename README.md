@@ -82,6 +82,32 @@ Revoking an agent invalidates the Hydra OAuth2 client, deletes the Keto tuple, a
 
 Future: Phase 6 binds agents to Skyfire KYA Pay credentials; Phase 7 wires the Hydra Login/Consent flow so a KYA token can be exchanged for a delegated user-bound access token.
 
+## Agent surfaces
+
+The merchant exposes two ways for agents to shop:
+
+1. **MCP server** at `POST /api/mcp` — JSON-RPC 2.0. Tools: `searchProducts`, `getProduct`, `addToCart`, `viewCart`, `submitCart`. Requires `Authorization: Bearer <hydra-access-token>` (mint via `pnpm demo:mint-agent-token` against a Hydra OAuth2 client).
+2. **HTML checkout with `X-KYA-Token` header** (Bose-style) — `POST /api/checkout` accepts an `X-KYA-Token: <jwt>` header in lieu of the human user-session flow. Walks the same HTML site a human would.
+
+Both surfaces converge on `lib/agent/validate-and-charge.ts`. In Phase 5, that stub returns **`HTTP 402 Payment Required`** with `WWW-Authenticate: KYAPay realm="merchant-agentic-demo"`. Phase 6 will wire real KYA token validation + Skyfire `chargeToken`.
+
+### Try it locally
+
+```bash
+# Terminal 1
+pnpm dev
+
+# Terminal 2 — first create a Hydra OAuth2 client via the Ory dashboard
+# (grant_types: ["client_credentials"]) and put the id+secret in .env.local:
+#   DEMO_AGENT_CLIENT_ID=...
+#   DEMO_AGENT_CLIENT_SECRET=...
+AGENT_TOKEN=$(pnpm demo:mint-agent-token | tail -1) pnpm demo:agent-mcp
+# or:
+pnpm demo:agent-browser
+```
+
+Both demos should report `received expected 402`.
+
 ## Architecture & roadmap
 
 - `docs/plans/2026-05-13-architecture-and-roadmap.md` — the master plan
