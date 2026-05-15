@@ -68,6 +68,20 @@ The OPL namespaces live in `scripts/ory-setup/keto-namespaces/namespaces.ts` and
 
 If you ever need to backfill tuples for orders in the DB that pre-date Phase 3, run `pnpm backfill:tuples`.
 
+## Agents
+
+Signed-in users can register AI agents at `/me/agents/new`. Each registered agent is a real entity in three places:
+
+- **Kratos** — a separate identity using the agent schema (traits: `owner_identity_id`, `agent_type`, `display_name`).
+- **Hydra** — an OAuth2 client (`grant_types: ["client_credentials"]` for Phase 4; Phase 7 adds device-code grant).
+- **Keto** — an `Agent:{aid}#owner@User:{uid}` tuple.
+
+The local DB (`agents` table) denormalizes display name, agent type, spend cap, expiry, and revocation timestamp for fast lookups.
+
+Revoking an agent invalidates the Hydra OAuth2 client, deletes the Keto tuple, and stamps the local row's `revoked_at`. The Kratos identity is kept for audit.
+
+Future: Phase 6 binds agents to Skyfire KYA Pay credentials; Phase 7 wires the Hydra Login/Consent flow so a KYA token can be exchanged for a delegated user-bound access token.
+
 ## Architecture & roadmap
 
 - `docs/plans/2026-05-13-architecture-and-roadmap.md` — the master plan
