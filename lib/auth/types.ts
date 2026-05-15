@@ -18,3 +18,12 @@ export interface Tuple {
   relation: string;
   subject: string; // either "User:abc" or a subject-set string like "Order:123#owner"
 }
+
+export interface Agent {
+  id: string;
+  displayName: string;
+  ownerIdentityId: string;
+  agentType: "shopping" | "research" | "general";
+  kyaCredentialId?: string;
+  attestationUrl?: string;
+}

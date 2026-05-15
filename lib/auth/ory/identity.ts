@@ -1,5 +1,5 @@
 import type { IdentityProvider } from "@/lib/auth/identity";
-import type { User } from "@/lib/auth/types";
+import type { User, Agent } from "@/lib/auth/types";
 import { identityAdmin } from "./client";
 
 function toUser(identity: { id: string; traits: unknown }): User {
@@ -60,5 +60,17 @@ export class OryIdentityProvider implements IdentityProvider {
     });
     const identity = result.data[0];
     return identity ? toUser(identity) : null;
+  }
+
+  async createAgent(): Promise<Agent> {
+    throw new Error("OryIdentityProvider.createAgent — implemented in P4.4");
+  }
+
+  async getAgentById(): Promise<Agent | null> {
+    throw new Error("OryIdentityProvider.getAgentById — implemented in P4.4");
+  }
+
+  async listAgentsByOwner(): Promise<Agent[]> {
+    throw new Error("OryIdentityProvider.listAgentsByOwner — implemented in P4.4");
   }
 }

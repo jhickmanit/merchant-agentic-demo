@@ -34,5 +34,38 @@ export function runIdentityContract(name: string, makeProvider: () => Promise<Id
       const p = await makeProvider();
       expect(await p.getByEmail("nope@nope")).toBeNull();
     });
+
+    it("createAgent returns an agent with id, displayName, ownerIdentityId, agentType", async () => {
+      const p = await makeProvider();
+      const owner = await p.createUser({ email: "owner-a@example.com" });
+      const agent = await p.createAgent({
+        displayName: "Shoppy",
+        ownerIdentityId: owner.id,
+        agentType: "shopping",
+      });
+      expect(agent.id).toBeTruthy();
+      expect(agent.displayName).toBe("Shoppy");
+      expect(agent.ownerIdentityId).toBe(owner.id);
+      expect(agent.agentType).toBe("shopping");
+    });
+
+    it("getAgentById round-trips", async () => {
+      const p = await makeProvider();
+      const owner = await p.createUser({ email: "owner-b@example.com" });
+      const agent = await p.createAgent({ displayName: "A", ownerIdentityId: owner.id, agentType: "shopping" });
+      const found = await p.getAgentById(agent.id);
+      expect(found?.displayName).toBe("A");
+    });
+
+    it("listAgentsByOwner filters by owner", async () => {
+      const p = await makeProvider();
+      const o1 = await p.createUser({ email: "o1@example.com" });
+      const o2 = await p.createUser({ email: "o2@example.com" });
+      await p.createAgent({ displayName: "A1", ownerIdentityId: o1.id, agentType: "shopping" });
+      await p.createAgent({ displayName: "A2", ownerIdentityId: o1.id, agentType: "research" });
+      await p.createAgent({ displayName: "B1", ownerIdentityId: o2.id, agentType: "general" });
+      const o1Agents = await p.listAgentsByOwner(o1.id);
+      expect(o1Agents).toHaveLength(2);
+    });
   });
 }
