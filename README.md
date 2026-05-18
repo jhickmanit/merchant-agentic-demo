@@ -108,6 +108,44 @@ pnpm demo:agent-browser
 
 Both demos should report `received expected 402`.
 
+## KYA Pay (Phase 6 — mock Skyfire)
+
+Phase 6 wires real KYA token verification + a mock Skyfire `chargeToken`. Order details show a **Mandate panel** when payment was via KYAPay.
+
+### Setup
+
+```bash
+pnpm gen:mock-skyfire-keys
+# Paste both lines into .env.local. DO NOT commit the private key.
+```
+
+### Demo flow
+
+```bash
+# Terminal 1: dev server
+pnpm dev
+
+# Terminal 2: register an agent via /me/agents UI (note its id)
+# Then mint a Hydra access token for the demo OAuth2 client and run:
+AGENT_TOKEN=$(pnpm demo:mint-agent-token | tail -1) \
+  pnpm demo:agent-mcp --agent <agent-id> --user-email <your-email>
+```
+
+The MCP demo agent lists tools, browses, adds to cart, views cart, mints a KYA token for the exact cart total, submits, and gets HTTP 200 + an order id. Visit `/orders/<id>` to see the Mandate panel.
+
+### Validation matrix
+
+| Failure | Status | `error` |
+|---|---|---|
+| Bad signature / expired / wrong audience | 400 | `kya_invalid` |
+| Amount doesn't match cart total | 400 | `amount_mismatch` |
+| `hid.email` doesn't match user | 403 | `hid_mismatch` |
+| `aid.id` doesn't match agent context | 403 | `aid_mismatch` |
+| Amount exceeds spend cap | 403 | `spend_cap_exceeded` |
+| Replay (same `jti` charged twice) | 402 | `charge_failed` |
+
+Phase 8 swaps `MockKyaPayProvider` for `SkyfireKyaPayProvider`. The merchant code doesn't change — `getPayments()` reads `KYAPAY_PROVIDER` and returns the right impl.
+
 ## Architecture & roadmap
 
 - `docs/plans/2026-05-13-architecture-and-roadmap.md` — the master plan
