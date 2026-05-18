@@ -50,4 +50,8 @@ echo "Configuring Keto namespaces..."
 "${DIR}/keto-config.sh"
 echo "  → OK"
 
+echo "Configuring Hydra (Login/Consent/Token-Hook URLs)..."
+"${DIR}/hydra-config.sh"
+echo "  → OK"
+
 echo "All Ory project configuration applied."
