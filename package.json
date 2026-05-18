@@ -19,7 +19,8 @@
     "backfill:tuples": "tsx scripts/backfill-order-tuples.ts",
     "demo:agent-mcp": "tsx scripts/demo-agent-mcp.ts",
     "demo:agent-browser": "tsx scripts/demo-agent-browser.ts",
-    "demo:mint-agent-token": "tsx scripts/mint-agent-token.ts"
+    "demo:mint-agent-token": "tsx scripts/mint-agent-token.ts",
+    "gen:mock-skyfire-keys": "tsx scripts/gen-mock-skyfire-keys.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
