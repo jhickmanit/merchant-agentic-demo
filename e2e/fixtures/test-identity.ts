@@ -26,7 +26,27 @@ export const test = base.extend<Fixture>({
     const id = result.data.id;
     // eslint-disable-next-line react-hooks/rules-of-hooks
     await use({ email, password, id });
-    await identityAdmin.deleteIdentity({ id });
+    // Delete any agent identities owned by this test user before deleting the user itself.
+    try {
+      const allIdentities = await identityAdmin.listIdentities({ pageSize: 250 });
+      for (const i of allIdentities.data) {
+        const traits = i.traits as { owner_identity_id?: string } | undefined;
+        if (traits?.owner_identity_id === id) {
+          try {
+            await identityAdmin.deleteIdentity({ id: i.id });
+          } catch (innerErr) {
+            console.warn(`Cleanup: could not delete agent ${i.id}:`, (innerErr as Error).message);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`Cleanup: agent list failed:`, (err as Error).message);
+    }
+    try {
+      await identityAdmin.deleteIdentity({ id });
+    } catch (err) {
+      console.warn(`Cleanup: could not delete test user ${id}:`, (err as Error).message);
+    }
   },
 
   gotoAuthenticated: async ({ page, testUser }, use) => {
