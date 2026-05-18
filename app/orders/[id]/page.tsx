@@ -6,6 +6,7 @@ import { getOrderById } from "@/lib/orders";
 import { formatCents } from "@/lib/format";
 import { withRecording, getRecordedChecks } from "@/lib/permissions-debug";
 import { DebugPolicyPanel } from "@/components/debug-policy-panel";
+import { MandatePanel } from "@/components/mandate-panel";
 
 async function loadAndCheck(id: string) {
   const store = await cookies();
@@ -89,19 +90,10 @@ export default async function OrderDetailPage({
         </div>
       </section>
       {order.paymentMethod === "kyapay" && (
-        <section className="rounded-lg border-2 border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/30 p-4 space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-            Mandate (KYA Pay)
-          </h2>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-muted-foreground">Payment method</dt>
-            <dd className="font-medium">KYAPay (mock Skyfire)</dd>
-            <dt className="text-muted-foreground">Skyfire charge</dt>
-            <dd className="font-mono text-xs">{order.skyfireChargeId ?? "—"}</dd>
-            <dt className="text-muted-foreground">Token jti</dt>
-            <dd className="font-mono text-xs">{order.paymentTokenJti ?? "—"}</dd>
-          </dl>
-        </section>
+        <MandatePanel
+          claims={order.kyaClaimsJson ? JSON.parse(order.kyaClaimsJson) : null}
+          chargeId={order.skyfireChargeId}
+        />
       )}
       <DebugPolicyPanel checks={checks} />
     </div>

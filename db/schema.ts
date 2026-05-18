@@ -77,6 +77,7 @@ export const orders = sqliteTable("orders", {
   paymentMethod: text("payment_method").notNull(), // "stub" | "kyapay" (phase 6)
   paymentTokenJti: text("payment_token_jti"),     // populated in phase 6
   skyfireChargeId: text("skyfire_charge_id"),     // populated in phase 6
+  kyaClaimsJson: text("kya_claims_json"),          // populated in polish phase PP.3
   subtotalCents: integer("subtotal_cents").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

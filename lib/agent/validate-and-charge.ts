@@ -130,6 +130,7 @@ export async function validateAndCharge(
       permissions: deps.permission,
       paymentTokenJti: claims.jti,
       skyfireChargeId: chargeResult.chargeId,
+      kyaClaimsJson: JSON.stringify(claims),
     },
   );
 

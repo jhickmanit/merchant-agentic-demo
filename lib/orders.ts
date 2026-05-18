@@ -13,6 +13,7 @@ export async function createOrderFromCart(
     permissions?: PermissionProvider;
     paymentTokenJti?: string;
     skyfireChargeId?: string;
+    kyaClaimsJson?: string;
   },
 ): Promise<string> {
   const lines = await db.query.cartItems.findMany({
@@ -36,6 +37,7 @@ export async function createOrderFromCart(
       subtotalCents: subtotal,
       paymentTokenJti: opts?.paymentTokenJti ?? null,
       skyfireChargeId: opts?.skyfireChargeId ?? null,
+      kyaClaimsJson: opts?.kyaClaimsJson ?? null,
     }).run();
     tx.insert(orderItems).values(
       lines.map((l) => ({

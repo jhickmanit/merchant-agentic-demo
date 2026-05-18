@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `kya_claims_json` text;
