@@ -1,10 +1,11 @@
 import { getDb, closeDb } from "./index";
-import { categories, products } from "./schema";
+import { categories, products, cartItems, orderItems } from "./schema";
 import { CATEGORIES, PRODUCTS } from "./seed-data";
 import { nanoid } from "nanoid";
 
-function picsum(seed: string, size = 800) {
-  return `https://picsum.photos/seed/${seed}/${size}/${size}`;
+// placehold.co: deterministic per slug, no broken URLs, on-theme emerald color.
+function placeholder(slug: string, size = 800) {
+  return `https://placehold.co/${size}x${size}/059669/ffffff?text=${encodeURIComponent(slug)}`;
 }
 
 async function main() {
@@ -12,6 +13,8 @@ async function main() {
 
   console.log(`Seeding ${CATEGORIES.length} categories and ${PRODUCTS.length} products...`);
 
+  await db.delete(cartItems);
+  await db.delete(orderItems);
   await db.delete(products);
   await db.delete(categories);
 
@@ -23,7 +26,7 @@ async function main() {
     name: p.name,
     description: p.description,
     priceCents: p.priceCents,
-    imageUrl: picsum(p.slug),
+    imageUrl: placeholder(p.slug),
     categorySlug: p.categorySlug,
   }));
 
