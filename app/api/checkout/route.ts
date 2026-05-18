@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import { getDb } from "@/db";
 import { getAuth } from "@/lib/auth";
+import { getPayments } from "@/lib/payments";
 import { createOrderFromCart } from "@/lib/orders";
 import { getCartWithItems } from "@/lib/cart";
 import { CART_COOKIE_NAME, parseCartIdFromCookie } from "@/lib/cart-cookie";
@@ -37,13 +38,16 @@ export async function POST() {
         priceCents: i.product.priceCents,
       })) ?? [];
     const totalCents = cartTotalFromLines(cart?.items ?? []);
-    const ctx = agentResult.ok
-      ? { agentId: agentResult.agentId, ownerUserId: agentResult.ownerUserId }
-      : { agentId: "unknown", ownerUserId: "unknown" };
+    const { kyaPay } = getPayments();
+    const { identity, permission } = getAuth();
+    // Agent ctx — fall back to "unknown" only if the agent gate didn't authenticate
+    const agentId = agentResult.ok ? agentResult.agentId : "unknown";
+    const ownerUserId = agentResult.ok ? agentResult.ownerUserId : "unknown";
     const result = await validateAndCharge({
       kyaJwt: kyaToken,
       cart: { items, totalCents },
-      ctx,
+      ctx: { agentId, ownerUserId, cartId: cartId ?? "" },
+      deps: { db: getDb(), kyaPay, identity, permission },
     });
     return NextResponse.json(result.body, { status: result.status, headers: result.headers });
   }

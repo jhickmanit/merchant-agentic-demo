@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { getDb } from "@/db";
+import { getAuth } from "@/lib/auth";
+import { getPayments } from "@/lib/payments";
 import { listProducts, listByCategory, getProductBySlug } from "@/lib/catalog";
 import { addItem, createCart, getCartWithItems } from "@/lib/cart";
 import { verifyAgentBearer } from "@/lib/auth/agent-gate";
@@ -145,10 +147,13 @@ async function dispatchTool(
         priceCents: i.product.priceCents,
       }));
       const totalCents = cartTotalFromLines(cart?.items ?? []);
+      const { kyaPay } = getPayments();
+      const { identity, permission } = getAuth();
       const result = await validateAndCharge({
         kyaJwt: kyaToken,
         cart: { items, totalCents },
-        ctx: { agentId: ctx.agentId, ownerUserId: ctx.ownerUserId },
+        ctx: { agentId: ctx.agentId, ownerUserId: ctx.ownerUserId, cartId: ctx.cartId },
+        deps: { db, kyaPay, identity, permission },
       });
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],

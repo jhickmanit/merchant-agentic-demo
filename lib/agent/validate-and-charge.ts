@@ -1,3 +1,11 @@
+import { eq } from "drizzle-orm";
+import type { DB } from "@/db";
+import { agents } from "@/db/schema";
+import type { KyaPayProvider } from "@/lib/payments/kyapay";
+import type { IdentityProvider } from "@/lib/auth/identity";
+import type { PermissionProvider } from "@/lib/auth/permissions";
+import { createOrderFromCart } from "@/lib/orders";
+
 export interface CartSnapshot {
   items: { productId: string; quantity: number; priceCents: number }[];
   totalCents: number;
@@ -6,7 +14,13 @@ export interface CartSnapshot {
 export interface ValidateAndChargeArgs {
   kyaJwt: string;
   cart: CartSnapshot;
-  ctx: { agentId: string; ownerUserId: string };
+  ctx: { agentId: string; ownerUserId: string; cartId: string };
+  deps: {
+    db: DB;
+    kyaPay: KyaPayProvider;
+    identity: IdentityProvider;
+    permission: PermissionProvider;
+  };
 }
 
 export interface ValidateAndChargeResult {
@@ -15,25 +29,104 @@ export interface ValidateAndChargeResult {
   body: Record<string, unknown>;
 }
 
-const WWW_AUTHENTICATE =
-  `KYAPay realm="merchant-agentic-demo", error="kya_validation_not_implemented"`;
+const WWW_AUTHENTICATE = `KYAPay realm="merchant-agentic-demo"`;
 
-export async function validateAndCharge(
-  args: ValidateAndChargeArgs,
-): Promise<ValidateAndChargeResult> {
+function fail(
+  status: number,
+  error: string,
+  message: string,
+  extra: Record<string, unknown> = {},
+): ValidateAndChargeResult {
   return {
-    status: 402,
+    status,
     headers: {
       "WWW-Authenticate": WWW_AUTHENTICATE,
       "Content-Type": "application/json",
     },
+    body: { error, message, ...extra },
+  };
+}
+
+export async function validateAndCharge(
+  args: ValidateAndChargeArgs,
+): Promise<ValidateAndChargeResult> {
+  const { kyaJwt, cart, ctx, deps } = args;
+
+  // 1. Verify KYA JWT
+  const v = await deps.kyaPay.verify(kyaJwt);
+  if (!v.ok) return fail(400, "kya_invalid", v.message, { code: v.code });
+  const claims = v.claims;
+
+  // 2. aid.id must match agent context
+  if (claims.aid.id !== ctx.agentId) {
+    return fail(403, "aid_mismatch",
+      `Token aid.id (${claims.aid.id}) does not match agent context (${ctx.agentId})`);
+  }
+
+  // 3. hid.email must match owner
+  const owner = await deps.identity.getById(ctx.ownerUserId);
+  if (!owner) return fail(403, "owner_not_found", `Owner ${ctx.ownerUserId} not found`);
+  if (claims.hid.email.toLowerCase() !== owner.email.toLowerCase()) {
+    return fail(403, "hid_mismatch",
+      `Token hid.email (${claims.hid.email}) does not match owner (${owner.email})`);
+  }
+
+  // 4. Token amount must equal cart total
+  if (claims.amount !== cart.totalCents) {
+    return fail(400, "amount_mismatch",
+      `Token amount (${claims.amount}) does not match cart total (${cart.totalCents})`);
+  }
+
+  // 5. Spend cap
+  const agentRow = await deps.db.query.agents.findFirst({ where: eq(agents.id, ctx.agentId) });
+  if (!agentRow) return fail(403, "agent_not_found", `Agent ${ctx.agentId} not in local DB`);
+  if (agentRow.revokedAt) return fail(403, "agent_revoked", "Agent has been revoked");
+  if (agentRow.spendCapCents !== null && claims.amount > agentRow.spendCapCents) {
+    return fail(403, "spend_cap_exceeded",
+      `Amount ${claims.amount} exceeds spend cap ${agentRow.spendCapCents}`,
+      { spendCapCents: agentRow.spendCapCents });
+  }
+
+  // 6. Charge
+  let chargeResult;
+  try {
+    chargeResult = await deps.kyaPay.charge(kyaJwt, claims.amount);
+  } catch (err) {
+    return fail(402, "charge_failed", (err as Error).message);
+  }
+
+  // 7. Write order
+  const orderId = await createOrderFromCart(
+    deps.db,
+    ctx.cartId,
+    owner.id,
+    "kyapay",
+    {
+      permissions: deps.permission,
+      paymentTokenJti: claims.jti,
+      skyfireChargeId: chargeResult.chargeId,
+    },
+  );
+
+  // 8. Decrement spend cap
+  if (agentRow.spendCapCents !== null) {
+    deps.db
+      .update(agents)
+      .set({ spendCapCents: agentRow.spendCapCents - claims.amount })
+      .where(eq(agents.id, ctx.agentId))
+      .run();
+  }
+
+  return {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
     body: {
-      error: "kya_validation_not_implemented",
-      message: "Phase 5 surfaces the agent paths; KYA validation arrives in Phase 6.",
-      phase: 5,
-      implementsIn: "Phase 6",
-      cart: { itemCount: args.cart.items.length, totalCents: args.cart.totalCents },
-      agentId: args.ctx.agentId,
+      ok: true,
+      orderId,
+      chargeId: chargeResult.chargeId,
+      settledAt: chargeResult.settledAt.toISOString(),
+      remainingSpendCapCents:
+        agentRow.spendCapCents === null ? null : agentRow.spendCapCents - claims.amount,
     },
   };
 }
