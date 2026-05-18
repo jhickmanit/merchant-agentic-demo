@@ -6,11 +6,11 @@
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 
-const require = createRequire(import.meta.url);
+const nodeRequire = createRequire(import.meta.url);
 
 function tryLoad() {
   try {
-    const Database = require("better-sqlite3");
+    const Database = nodeRequire("better-sqlite3");
     new Database(":memory:").close();
     return { ok: true };
   } catch (err) {
