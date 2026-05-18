@@ -1,14 +1,24 @@
-// MCP demo agent: connects to localhost:3000/api/mcp, browses, adds to cart, submits.
-// Expects AGENT_TOKEN in env (mint via pnpm demo:mint-agent-token first).
+// MCP demo agent: connects to localhost:3000/api/mcp, browses, adds to cart,
+// mints a KYA token for the cart total, submits, expects HTTP 200.
+//
+// Usage:
+//   AGENT_TOKEN=$(pnpm demo:mint-agent-token | tail -1) \
+//     pnpm demo:agent-mcp --agent <agent-id> --user-email <email> [--agent-name <name>]
 
 export {};
+
+import { mintKyaToken } from "../lib/payments/mint";
 
 const BASE = "http://localhost:3000/api/mcp";
 
 interface JsonRpcResponse {
   jsonrpc: string;
   id: string;
-  result?: { tools?: { name: string }[]; content?: { type: string; text: string }[]; isError?: boolean };
+  result?: {
+    tools?: { name: string }[];
+    content?: { type: string; text: string }[];
+    isError?: boolean;
+  };
   error?: { code: number; message: string };
 }
 
@@ -33,10 +43,19 @@ async function rpc(token: string, method: string, params: Record<string, unknown
   return res.json() as Promise<JsonRpcResponse>;
 }
 
+function arg(name: string, fallback?: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i === -1) return fallback;
+  return process.argv[i + 1];
+}
+
 async function main() {
   const token = process.env.AGENT_TOKEN;
-  if (!token) {
-    console.error("Set AGENT_TOKEN. Mint one with: AGENT_TOKEN=$(pnpm demo:mint-agent-token | tail -1)");
+  const agentId = arg("agent");
+  const agentName = arg("agent-name", "MCP Demo Bot")!;
+  const userEmail = arg("user-email");
+  if (!token || !agentId || !userEmail) {
+    console.error("Usage: AGENT_TOKEN=... pnpm demo:agent-mcp --agent <agent-id> --user-email <email> [--agent-name <name>]");
     process.exit(1);
   }
 
@@ -46,9 +65,17 @@ async function main() {
   console.log("   →", names.join(", "));
 
   console.log("2. searchProducts (food)");
-  const products = await rpc(token, "tools/call", { name: "searchProducts", arguments: { category: "food" } });
+  const products = await rpc(token, "tools/call", {
+    name: "searchProducts",
+    arguments: { category: "food" },
+  });
   const productsText = products.result?.content?.[0]?.text ?? "[]";
-  const list = JSON.parse(productsText) as Array<{ id: string; slug: string; name: string; priceCents: number }>;
+  const list = JSON.parse(productsText) as Array<{
+    id: string;
+    slug: string;
+    name: string;
+    priceCents: number;
+  }>;
   console.log("   →", list.length, "products");
   if (list.length === 0) {
     console.error("No products found in 'food' category. Did you run pnpm db:seed?");
@@ -57,22 +84,44 @@ async function main() {
   const first = list[0];
 
   console.log("3. addToCart", first.slug);
-  await rpc(token, "tools/call", { name: "addToCart", arguments: { productId: first.id, quantity: 2 } });
+  await rpc(token, "tools/call", {
+    name: "addToCart",
+    arguments: { productId: first.id, quantity: 2 },
+  });
 
   console.log("4. viewCart");
   const cart = await rpc(token, "tools/call", { name: "viewCart", arguments: {} });
-  console.log("   →", cart.result?.content?.[0]?.text);
+  const cartText = cart.result?.content?.[0]?.text ?? "{}";
+  const cartParsed = JSON.parse(cartText) as { totalCents: number };
+  console.log("   → totalCents:", cartParsed.totalCents);
 
-  console.log("5. submitCart");
-  const submit = await rpc(token, "tools/call", { name: "submitCart", arguments: { kyaToken: "fake.kya.jwt.for.phase.5" } });
+  console.log("5. mintKyaToken (matching cart total)");
+  const kya = await mintKyaToken({
+    agentId,
+    agentName,
+    userEmail,
+    amountCents: cartParsed.totalCents,
+  });
+
+  console.log("6. submitCart with real KYA token");
+  const submit = await rpc(token, "tools/call", {
+    name: "submitCart",
+    arguments: { kyaToken: kya },
+  });
   const submitText = submit.result?.content?.[0]?.text ?? "{}";
-  const result = JSON.parse(submitText) as { status: number; body: { error: string; phase?: number } };
-  console.log("   → status:", result.status, "/ body.error:", result.body.error);
-  if (result.status !== 402) {
-    console.error("Expected 402 in Phase 5, got:", result.status);
+  const result = JSON.parse(submitText) as {
+    status: number;
+    body: { orderId?: string; chargeId?: string; error?: string; message?: string };
+  };
+  console.log("   → status:", result.status);
+  if (result.status !== 200) {
+    console.error("Expected 200, got:", result.status, result.body);
     process.exit(1);
   }
-  console.log("✓ MCP demo agent received expected 402 (KYA validation arrives in Phase 6)");
+  console.log("✓ Order placed:", result.body.orderId, "/ charge:", result.body.chargeId);
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
