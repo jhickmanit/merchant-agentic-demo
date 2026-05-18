@@ -146,6 +146,52 @@ The MCP demo agent lists tools, browses, adds to cart, views cart, mints a KYA t
 
 Phase 8 swaps `MockKyaPayProvider` for `SkyfireKyaPayProvider`. The merchant code doesn't change — `getPayments()` reads `KYAPAY_PROVIDER` and returns the right impl.
 
+## Delegated tokens (Phase 7)
+
+Agents bootstrap a Hydra-issued user-bound access token from their KYA JWT instead of relying on static client credentials. The merchant authorizes purchases against the Hydra token's `act` (agent) + `sub` (user) + `authorization_details` claims; KYA settlement still flows through `kyaPay.charge()`.
+
+### How it works
+
+1. Agent mints a bootstrap KYA via `mintKyaToken` (helper exported from `lib/payments/mint.ts`).
+2. Agent POSTs to `/api/oauth/agent-bootstrap` with `{ kya_jwt }`.
+3. The merchant's orchestrator drives Hydra's `authorization_code` flow server-side:
+   - Sets a `kya_bootstrap` cookie carrying the JWT.
+   - Hits Hydra's `/oauth2/auth` endpoint and follows redirects through `/oauth/login` → `/oauth/consent` → callback.
+   - Our **Login app** validates the KYA, looks up the agent + owner, calls `acceptOAuth2LoginRequest({subject, context})`.
+   - Our **Consent app** auto-accepts with `act` + `authorization_details` (RFC 9396) written into `session.access_token`.
+   - Exchanges the resulting code for an `ory_at_...` access token.
+4. Agent uses the access token as Bearer for all subsequent MCP calls.
+5. At `submitCart`, the agent passes a **fresh settlement KYA** matching the cart total. The merchant verifies it via mock Skyfire and charges.
+
+### Why this matters
+
+| Aspect | Phase 6 | Phase 7 |
+|---|---|---|
+| Agent identity to merchant | `client_credentials` token | Hydra-issued delegated token (with `act` claim) |
+| User identity binding | DB lookup via agent.owner_user_id | `sub` claim in the Hydra token |
+| Spending limit | local DB `spend_cap_cents` | also `authorization_details.max_amount` (snapshot at consent time) |
+| KYA token's role | Agent presents on every request | One-shot bootstrap + per-charge settlement |
+
+This is Ory's canonical delegation envelope — `sub`/`act`/`authorization_details` modeled on RFC 9396 and the spirit of RFC 8693 (even though Hydra doesn't natively support token-exchange).
+
+### Try it
+
+```bash
+# Terminal 1
+pnpm dev
+
+# Terminal 2 — once a registered agent exists in the DB and DEMO_AGENT_CLIENT_* is set
+pnpm demo:agent-mcp --agent <agent-id> --user-email <owner-email>
+```
+
+The script mints a bootstrap KYA, bootstraps a delegated token, drives MCP tool calls, mints a settlement KYA, and submits the cart. Visit `/orders/<id>` to see the Mandate panel.
+
+### Notes & limitations
+
+- The OAuth2 redirect-following uses a hand-rolled cookie jar inside `fetch` (`lib/oauth/bootstrap.ts`). Production should use a real OAuth2 client library.
+- **Token hooks are silently dropped on Ory Network's hosted Hydra.** The `/api/token-hook` route exists for forward-compatibility with self-hosted Hydra. Spend-cap enforcement on the hosted demo lives entirely in `validateAndCharge`.
+- Ory Network's hosted Hydra issues opaque tokens (`ory_at_...`) by default. We verify them via introspection (`/admin/oauth2/introspect`), not local JWT verification.
+
 ## Architecture & roadmap
 
 - `docs/plans/2026-05-13-architecture-and-roadmap.md` — the master plan
