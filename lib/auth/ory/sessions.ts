@@ -1,5 +1,6 @@
 import type { SessionProvider } from "@/lib/auth/sessions";
 import type { Session, User } from "@/lib/auth/types";
+import { Configuration, IdentityApi } from "@ory/client";
 import { frontend } from "./client";
 
 const ORY_SESSION_COOKIE = "ory_kratos_session";
@@ -40,9 +41,22 @@ export class OrySessionProvider implements SessionProvider {
   }
 
   async revoke(sessionId: string): Promise<void> {
-    // Kratos session revoke is admin-API only and requires the session ID, which we have.
-    // Production polish (Phase 10) will wire this via identityAdmin.disableSession().
-    // For Phase 2, no-op — the /logout route clears the cookie locally.
-    void sessionId;
+    const apiKey = process.env.ORY_ADMIN_API_KEY ?? process.env.ORY_API_KEY;
+    if (!apiKey || !process.env.ORY_SDK_URL) {
+      return; // not configured for admin operations
+    }
+    const admin = new IdentityApi(
+      new Configuration({
+        basePath: process.env.ORY_SDK_URL,
+        baseOptions: { headers: { Authorization: `Bearer ${apiKey}` } },
+      }),
+    );
+    try {
+      await admin.disableSession({ id: sessionId });
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 404) return; // already revoked or never existed
+      throw err;
+    }
   }
 }
