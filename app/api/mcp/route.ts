@@ -5,7 +5,9 @@ import { getDb } from "@/db";
 import { getAuth } from "@/lib/auth";
 import { getPayments } from "@/lib/payments";
 import { listProducts, listByCategory, getProductBySlug } from "@/lib/catalog";
-import { addItem, createCart, getCartWithItems } from "@/lib/cart";
+import { addItem, getCartWithItems } from "@/lib/cart";
+import { eq } from "drizzle-orm";
+import { carts } from "@/db/schema";
 import { verifyAgentBearer } from "@/lib/auth/agent-gate";
 import { validateAndCharge } from "@/lib/agent/validate-and-charge";
 import { cartTotalFromLines } from "@/lib/cart-math";
@@ -192,9 +194,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. Each authenticated request gets a fresh cart for Phase 5.
-  // (Phase 7 will give agents persistent carts via session continuity.)
-  const cartId = await createCart(getDb());
+  // 3. Resolve a persistent cart for this agent. The cart id is deterministic
+  //    so the same agent accumulates items across multiple MCP requests.
+  //    After submitCart, createOrderFromCart clears the items, so the next
+  //    request starts with an empty cart — that's the correct behavior.
+  const cartId = `agent-cart-${auth.agentId}`;
+  const existing = await getDb().query.carts.findFirst({ where: eq(carts.id, cartId) });
+  if (!existing) {
+    await getDb().insert(carts).values({ id: cartId, userId: auth.ownerUserId });
+  }
   const ctx = {
     agentId: auth.agentId,
     ownerUserId: auth.ownerUserId,
