@@ -41,12 +41,18 @@ export async function POST() {
     const { kyaPay } = getPayments();
     const { identity, permission } = getAuth();
     // Agent ctx — fall back to "unknown" only if the agent gate didn't authenticate
-    const agentId = agentResult.ok ? agentResult.agentId : "unknown";
-    const ownerUserId = agentResult.ok ? agentResult.ownerUserId : "unknown";
+    const ctx = agentResult.ok
+      ? {
+          agentId: agentResult.agentId,
+          ownerUserId: agentResult.ownerUserId,
+          cartId: cartId ?? "",
+          delegationClaims: agentResult.delegationClaims,
+        }
+      : { agentId: "unknown", ownerUserId: "unknown", cartId: cartId ?? "" };
     const result = await validateAndCharge({
       kyaJwt: kyaToken,
       cart: { items, totalCents },
-      ctx: { agentId, ownerUserId, cartId: cartId ?? "" },
+      ctx,
       deps: { db: getDb(), kyaPay, identity, permission },
     });
     return NextResponse.json(result.body, { status: result.status, headers: result.headers });

@@ -9,6 +9,7 @@ import { MemoryIdentityProvider } from "@/lib/auth/memory/identity";
 import { MemoryPermissionProvider } from "@/lib/auth/memory/permissions";
 import { mintTestKeypair } from "@/lib/payments/__tests__/helpers";
 import { mintKyaToken } from "@/lib/payments/mint";
+import type { DelegationClaims } from "@/lib/auth/delegated-token";
 
 const ISSUER = "http://test-issuer";
 const AUDIENCE = "merchant-agentic-demo";
@@ -139,5 +140,76 @@ describe("validateAndCharge (Phase 6 real impl)", () => {
     });
     expect(result.status).toBe(400);
     expect(result.body.error).toBe("amount_mismatch");
+  });
+});
+
+describe("validateAndCharge with delegation claims (Phase 7)", () => {
+  it("happy path: delegation claims match, max_amount honored", async () => {
+    const s = await setup({ spendCapCents: 100000 });
+    const token = await mintKyaToken({
+      agentId: s.agent.id, agentName: "Shoppy", userEmail: "alice@example.com",
+      amountCents: 5000, issuer: ISSUER, audience: AUDIENCE, sellerServiceId: AUDIENCE,
+      privateKey: s.privateKey,
+    });
+    const delegationClaims: DelegationClaims = {
+      sub: s.owner.id,
+      act: { sub: s.agent.id, agent_type: "shopping", kya_jti: "any" },
+      authorization_details: [
+        { type: "agent_purchase", merchant: "merchant-agentic-demo", max_amount: 10000, currency: "USD" },
+      ],
+    };
+    const result = await validateAndCharge({
+      kyaJwt: token,
+      cart: { items: [{ productId: "p1", quantity: 1, priceCents: 5000 }], totalCents: 5000 },
+      ctx: { agentId: s.agent.id, ownerUserId: s.owner.id, cartId: s.cartId, delegationClaims },
+      deps: { db: s.testDb.db, kyaPay: s.kyaPay, identity: s.identity, permission: s.permission },
+    });
+    expect(result.status).toBe(200);
+  });
+
+  it("rejects delegation_act_mismatch", async () => {
+    const s = await setup();
+    const token = await mintKyaToken({
+      agentId: s.agent.id, agentName: "Shoppy", userEmail: "alice@example.com",
+      amountCents: 5000, issuer: ISSUER, audience: AUDIENCE, sellerServiceId: AUDIENCE,
+      privateKey: s.privateKey,
+    });
+    const delegationClaims: DelegationClaims = {
+      sub: s.owner.id,
+      act: { sub: "wrong-agent" },
+      authorization_details: [],
+    };
+    const result = await validateAndCharge({
+      kyaJwt: token,
+      cart: { items: [{ productId: "p1", quantity: 1, priceCents: 5000 }], totalCents: 5000 },
+      ctx: { agentId: s.agent.id, ownerUserId: s.owner.id, cartId: s.cartId, delegationClaims },
+      deps: { db: s.testDb.db, kyaPay: s.kyaPay, identity: s.identity, permission: s.permission },
+    });
+    expect(result.status).toBe(403);
+    expect(result.body.error).toBe("delegation_act_mismatch");
+  });
+
+  it("rejects delegation_max_amount_exceeded", async () => {
+    const s = await setup({ spendCapCents: 100000 });
+    const token = await mintKyaToken({
+      agentId: s.agent.id, agentName: "Shoppy", userEmail: "alice@example.com",
+      amountCents: 5000, issuer: ISSUER, audience: AUDIENCE, sellerServiceId: AUDIENCE,
+      privateKey: s.privateKey,
+    });
+    const delegationClaims: DelegationClaims = {
+      sub: s.owner.id,
+      act: { sub: s.agent.id },
+      authorization_details: [
+        { type: "agent_purchase", max_amount: 1000, merchant: "merchant-agentic-demo", currency: "USD" },
+      ],
+    };
+    const result = await validateAndCharge({
+      kyaJwt: token,
+      cart: { items: [{ productId: "p1", quantity: 1, priceCents: 5000 }], totalCents: 5000 },
+      ctx: { agentId: s.agent.id, ownerUserId: s.owner.id, cartId: s.cartId, delegationClaims },
+      deps: { db: s.testDb.db, kyaPay: s.kyaPay, identity: s.identity, permission: s.permission },
+    });
+    expect(result.status).toBe(403);
+    expect(result.body.error).toBe("delegation_max_amount_exceeded");
   });
 });

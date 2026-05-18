@@ -9,6 +9,7 @@ import { addItem, createCart, getCartWithItems } from "@/lib/cart";
 import { verifyAgentBearer } from "@/lib/auth/agent-gate";
 import { validateAndCharge } from "@/lib/agent/validate-and-charge";
 import { cartTotalFromLines } from "@/lib/cart-math";
+import type { DelegationClaims } from "@/lib/auth/delegated-token";
 
 // MCP wire protocol is JSON-RPC 2.0 (https://modelcontextprotocol.io/specification).
 // Phase 5 needs only `tools/list` and `tools/call`.
@@ -81,7 +82,7 @@ const TOOLS = [
 async function dispatchTool(
   name: string,
   args: Record<string, unknown> | undefined,
-  ctx: { agentId: string; ownerUserId: string; cartId: string },
+  ctx: { agentId: string; ownerUserId: string; cartId: string; delegationClaims?: DelegationClaims },
 ) {
   const db = getDb();
   switch (name) {
@@ -152,7 +153,7 @@ async function dispatchTool(
       const result = await validateAndCharge({
         kyaJwt: kyaToken,
         cart: { items, totalCents },
-        ctx: { agentId: ctx.agentId, ownerUserId: ctx.ownerUserId, cartId: ctx.cartId },
+        ctx: { agentId: ctx.agentId, ownerUserId: ctx.ownerUserId, cartId: ctx.cartId, delegationClaims: ctx.delegationClaims },
         deps: { db, kyaPay, identity, permission },
       });
       return {
@@ -194,7 +195,12 @@ export async function POST(req: NextRequest) {
   // 3. Each authenticated request gets a fresh cart for Phase 5.
   // (Phase 7 will give agents persistent carts via session continuity.)
   const cartId = await createCart(getDb());
-  const ctx = { agentId: auth.agentId, ownerUserId: auth.ownerUserId, cartId };
+  const ctx = {
+    agentId: auth.agentId,
+    ownerUserId: auth.ownerUserId,
+    cartId,
+    delegationClaims: auth.delegationClaims,
+  };
 
   // 4. Dispatch
   try {

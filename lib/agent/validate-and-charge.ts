@@ -5,6 +5,7 @@ import type { KyaPayProvider } from "@/lib/payments/kyapay";
 import type { IdentityProvider } from "@/lib/auth/identity";
 import type { PermissionProvider } from "@/lib/auth/permissions";
 import { createOrderFromCart } from "@/lib/orders";
+import type { DelegationClaims } from "@/lib/auth/delegated-token";
 
 export interface CartSnapshot {
   items: { productId: string; quantity: number; priceCents: number }[];
@@ -14,7 +15,12 @@ export interface CartSnapshot {
 export interface ValidateAndChargeArgs {
   kyaJwt: string;
   cart: CartSnapshot;
-  ctx: { agentId: string; ownerUserId: string; cartId: string };
+  ctx: {
+    agentId: string;
+    ownerUserId: string;
+    cartId: string;
+    delegationClaims?: DelegationClaims;
+  };
   deps: {
     db: DB;
     kyaPay: KyaPayProvider;
@@ -71,13 +77,32 @@ export async function validateAndCharge(
       `Token hid.email (${claims.hid.email}) does not match owner (${owner.email})`);
   }
 
-  // 4. Token amount must equal cart total
+  // 4. Delegation cross-checks (Phase 7)
+  if (ctx.delegationClaims) {
+    const dc = ctx.delegationClaims;
+    if (dc.act.sub !== ctx.agentId) {
+      return fail(403, "delegation_act_mismatch",
+        `Delegated token act.sub (${dc.act.sub}) does not match agent context (${ctx.agentId})`);
+    }
+    if (dc.sub !== ctx.ownerUserId) {
+      return fail(403, "delegation_sub_mismatch",
+        `Delegated token sub (${dc.sub}) does not match owner context (${ctx.ownerUserId})`);
+    }
+    const detail = dc.authorization_details.find((d) => d.type === "agent_purchase");
+    if (detail && typeof detail.max_amount === "number" && claims.amount > detail.max_amount) {
+      return fail(403, "delegation_max_amount_exceeded",
+        `KYA amount (${claims.amount}) exceeds delegation max_amount (${detail.max_amount})`,
+        { delegationMaxAmount: detail.max_amount });
+    }
+  }
+
+  // 5. Token amount must equal cart total
   if (claims.amount !== cart.totalCents) {
     return fail(400, "amount_mismatch",
       `Token amount (${claims.amount}) does not match cart total (${cart.totalCents})`);
   }
 
-  // 5. Spend cap
+  // 6. Spend cap
   const agentRow = await deps.db.query.agents.findFirst({ where: eq(agents.id, ctx.agentId) });
   if (!agentRow) return fail(403, "agent_not_found", `Agent ${ctx.agentId} not in local DB`);
   if (agentRow.revokedAt) return fail(403, "agent_revoked", "Agent has been revoked");
