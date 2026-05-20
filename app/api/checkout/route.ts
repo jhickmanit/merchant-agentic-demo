@@ -8,10 +8,15 @@ import { getCartWithItems } from "@/lib/cart";
 import { CART_COOKIE_NAME, parseCartIdFromCookie } from "@/lib/cart-cookie";
 import { verifyAgentBearer } from "@/lib/auth/agent-gate";
 import { validateAndCharge } from "@/lib/agent/validate-and-charge";
+import { ensureAgentAndOwner } from "@/lib/agent/auto-provision";
+import type { DelegationClaims } from "@/lib/auth/delegated-token";
 import { cartTotalFromLines } from "@/lib/cart-math";
 
 async function extractKyaToken(): Promise<string | null> {
   const hs = await headers();
+  // Skyfire's documented header for embedded-browser-style agents (e.g. Bose demo).
+  const skyfirePayId = hs.get("skyfire-pay-id");
+  if (skyfirePayId) return skyfirePayId;
   const xKya = hs.get("x-kya-token");
   if (xKya) return xKya;
   const auth = hs.get("authorization");
@@ -40,15 +45,43 @@ export async function POST() {
     const totalCents = cartTotalFromLines(cart?.items ?? []);
     const { kyaPay } = getPayments();
     const { identity, permission } = getAuth();
-    // Agent ctx — fall back to "unknown" only if the agent gate didn't authenticate
-    const ctx = agentResult.ok
-      ? {
-          agentId: agentResult.agentId,
-          ownerUserId: agentResult.ownerUserId,
-          cartId: cartId ?? "",
-          delegationClaims: agentResult.delegationClaims,
-        }
-      : { agentId: "unknown", ownerUserId: "unknown", cartId: cartId ?? "" };
+
+    // Agent ctx:
+    //   1. Hydra delegated bearer (Phase 7 programmatic agent flow) — preferred when present.
+    //   2. Otherwise auto-provision from the KYA claims (Phase 9 — Bose-style embedded
+    //      browser where KYA-in-header is the only auth signal).
+    let ctx: {
+      agentId: string;
+      ownerUserId: string;
+      cartId: string;
+      delegationClaims?: DelegationClaims;
+    };
+    if (agentResult.ok) {
+      ctx = {
+        agentId: agentResult.agentId,
+        ownerUserId: agentResult.ownerUserId,
+        cartId: cartId ?? "",
+        delegationClaims: agentResult.delegationClaims,
+      };
+    } else {
+      const pre = await kyaPay.verify(kyaToken);
+      if (!pre.ok) {
+        return NextResponse.json(
+          { error: "kya_invalid", code: pre.code, message: pre.message },
+          { status: 400, headers: { "WWW-Authenticate": `KYAPay realm="merchant-agentic-demo"` } },
+        );
+      }
+      const provisioned = await ensureAgentAndOwner(pre.claims, {
+        db: getDb(),
+        identity,
+        permission,
+      });
+      ctx = {
+        agentId: provisioned.agentId,
+        ownerUserId: provisioned.ownerUserId,
+        cartId: cartId ?? "",
+      };
+    }
     const result = await validateAndCharge({
       kyaJwt: kyaToken,
       cart: { items, totalCents },

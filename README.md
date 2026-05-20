@@ -171,6 +171,17 @@ Real Skyfire KYA tokens carry identity only (no `amount`/`cur`). The merchant us
 
 Settlement is currently a synthetic `sf-*` chargeId. Real Skyfire settlement uses `pay` / `kya-pay` tokens — a future phase.
 
+### Phase 9 — embedded-browser KYA + auto-provision
+
+For embedded-browser agents (e.g. Skyfire's Bose/Visa demo), the merchant accepts the KYA token via the `skyfire-pay-id` request header on `/api/checkout`. No prior agent or user registration is required:
+
+- If `hid.email` doesn't match a local user → a Kratos identity is created (`createUser`).
+- If `claims.agentId` (Skyfire's `sub`) doesn't match a local `agents` row → one is inserted with `id = claims.agentId`, owner = the (now-existing) user, no spend cap, no per-purchase max. Keto tuple `Agent:<id>#owner@User:<ownerId>` is written.
+
+Subsequent requests with the same KYA token are idempotent — existing rows are reused. Auto-provisioning only fires on the agent-checkout path (no Hydra bearer present); the Phase 7 delegated-token flow continues to require pre-registered agents.
+
+Accepted KYA header sources (in priority order): `skyfire-pay-id`, `x-kya-token`, `Authorization: KYAPay <jwt>`.
+
 ## Delegated tokens (Phase 7)
 
 Agents bootstrap a Hydra-issued user-bound access token from their KYA JWT instead of relying on static client credentials. The merchant authorizes purchases against the Hydra token's `act` (agent) + `sub` (user) + `authorization_details` claims; KYA settlement still flows through `kyaPay.charge()`.
