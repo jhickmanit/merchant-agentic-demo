@@ -146,6 +146,31 @@ The MCP demo agent lists tools, browses, adds to cart, views cart, mints a KYA t
 
 Phase 8 swaps `MockKyaPayProvider` for `SkyfireKyaPayProvider`. The merchant code doesn't change — `getPayments()` reads `KYAPAY_PROVIDER` and returns the right impl.
 
+## KYA Pay (Phase 8 — real Skyfire)
+
+Set in `.env.local`:
+
+```
+KYAPAY_PROVIDER=skyfire
+SKYFIRE_BUYER_API_KEY=<your buyer agent api key>
+# optional overrides:
+# SKYFIRE_JWKS_URL=https://app.skyfire.xyz/.well-known/jwks.json
+# SKYFIRE_ISSUER=https://app.skyfire.xyz
+# SKYFIRE_API_BASE=https://api.skyfire.xyz/api/v1
+# SKYFIRE_EXPECTED_AUDIENCE=<seller agent id, if you want strict aud enforcement>
+```
+
+Mint a real KYA token for manual /charge testing:
+
+```bash
+pnpm skyfire:mint-kya --sellerDomain http://localhost:3000
+# prints the JWT to stdout
+```
+
+Real Skyfire KYA tokens carry identity only (no `amount`/`cur`). The merchant uses the cart total as the charge amount; identity verification (`hid.email` matches the owner, `sub` matches the bound agent) still gates the charge.
+
+Settlement is currently a synthetic `sf-*` chargeId. Real Skyfire settlement uses `pay` / `kya-pay` tokens — a future phase.
+
 ## Delegated tokens (Phase 7)
 
 Agents bootstrap a Hydra-issued user-bound access token from their KYA JWT instead of relying on static client credentials. The merchant authorizes purchases against the Hydra token's `act` (agent) + `sub` (user) + `authorization_details` claims; KYA settlement still flows through `kyaPay.charge()`.

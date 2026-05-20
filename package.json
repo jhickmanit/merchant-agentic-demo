@@ -22,7 +22,8 @@
     "demo:agent-browser": "tsx scripts/demo-agent-browser.ts",
     "demo:mint-agent-token": "tsx scripts/mint-agent-token.ts",
     "demo:mint-kya-token": "tsx scripts/mint-kya-test-token.ts",
-    "gen:mock-skyfire-keys": "tsx scripts/gen-mock-skyfire-keys.ts"
+    "gen:mock-skyfire-keys": "tsx scripts/gen-mock-skyfire-keys.ts",
+    "skyfire:mint-kya": "node --env-file=.env.local ./node_modules/.bin/tsx scripts/skyfire/mint-kya.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
