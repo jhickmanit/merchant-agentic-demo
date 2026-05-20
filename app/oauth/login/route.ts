@@ -48,10 +48,10 @@ export async function GET(req: NextRequest) {
   // 3. Look up the agent — must exist locally and not be revoked.
   const db = getDb();
   const agentRow = await db.query.agents.findFirst({
-    where: eq(agents.id, claims.aid.id),
+    where: eq(agents.id, claims.agentId),
   });
   if (!agentRow) {
-    return NextResponse.json({ error: "unknown_agent", agentId: claims.aid.id }, { status: 403 });
+    return NextResponse.json({ error: "unknown_agent", agentId: claims.agentId }, { status: 403 });
   }
   if (agentRow.revokedAt) {
     return NextResponse.json({ error: "agent_revoked" }, { status: 403 });
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
           agent_id: agentRow.id,
           agent_type: agentRow.agentType,
           kya_jti: claims.jti,
-          kya_amount: claims.amount,
+          kya_amount: claims.amount ?? null,
           spend_cap_cents: agentRow.spendCapCents,
         },
       },

@@ -63,10 +63,10 @@ export async function validateAndCharge(
   if (!v.ok) return fail(400, "kya_invalid", v.message, { code: v.code });
   const claims = v.claims;
 
-  // 2. aid.id must match agent context
-  if (claims.aid.id !== ctx.agentId) {
+  // 2. Provider-agnostic agent id must match agent context
+  if (claims.agentId !== ctx.agentId) {
     return fail(403, "aid_mismatch",
-      `Token aid.id (${claims.aid.id}) does not match agent context (${ctx.agentId})`);
+      `Token agentId (${claims.agentId}) does not match agent context (${ctx.agentId})`);
   }
 
   // 3. hid.email must match owner
@@ -89,33 +89,36 @@ export async function validateAndCharge(
         `Delegated token sub (${dc.sub}) does not match owner context (${ctx.ownerUserId})`);
     }
     const detail = dc.authorization_details.find((d) => d.type === "agent_purchase");
-    if (detail && typeof detail.max_amount === "number" && claims.amount > detail.max_amount) {
+    const effectiveAmount = claims.amount ?? cart.totalCents;
+    if (detail && typeof detail.max_amount === "number" && effectiveAmount > detail.max_amount) {
       return fail(403, "delegation_max_amount_exceeded",
-        `KYA amount (${claims.amount}) exceeds delegation max_amount (${detail.max_amount})`,
+        `Amount (${effectiveAmount}) exceeds delegation max_amount (${detail.max_amount})`,
         { delegationMaxAmount: detail.max_amount });
     }
   }
 
-  // 5. Token amount must equal cart total
-  if (claims.amount !== cart.totalCents) {
+  // 5. Token amount (if present) must equal cart total. Skyfire KYA tokens carry no amount
+  //    — cart total is authoritative.
+  if (claims.amount !== undefined && claims.amount !== cart.totalCents) {
     return fail(400, "amount_mismatch",
       `Token amount (${claims.amount}) does not match cart total (${cart.totalCents})`);
   }
+  const chargeAmount = claims.amount ?? cart.totalCents;
 
   // 6. Spend cap
   const agentRow = await deps.db.query.agents.findFirst({ where: eq(agents.id, ctx.agentId) });
   if (!agentRow) return fail(403, "agent_not_found", `Agent ${ctx.agentId} not in local DB`);
   if (agentRow.revokedAt) return fail(403, "agent_revoked", "Agent has been revoked");
-  if (agentRow.spendCapCents !== null && claims.amount > agentRow.spendCapCents) {
+  if (agentRow.spendCapCents !== null && chargeAmount > agentRow.spendCapCents) {
     return fail(403, "spend_cap_exceeded",
-      `Amount ${claims.amount} exceeds spend cap ${agentRow.spendCapCents}`,
+      `Amount ${chargeAmount} exceeds spend cap ${agentRow.spendCapCents}`,
       { spendCapCents: agentRow.spendCapCents });
   }
 
   // 6. Charge
   let chargeResult;
   try {
-    chargeResult = await deps.kyaPay.charge(kyaJwt, claims.amount);
+    chargeResult = await deps.kyaPay.charge(kyaJwt, chargeAmount);
   } catch (err) {
     return fail(402, "charge_failed", (err as Error).message);
   }
@@ -138,7 +141,7 @@ export async function validateAndCharge(
   if (agentRow.spendCapCents !== null) {
     deps.db
       .update(agents)
-      .set({ spendCapCents: agentRow.spendCapCents - claims.amount })
+      .set({ spendCapCents: agentRow.spendCapCents - chargeAmount })
       .where(eq(agents.id, ctx.agentId))
       .run();
   }
@@ -152,7 +155,7 @@ export async function validateAndCharge(
       chargeId: chargeResult.chargeId,
       settledAt: chargeResult.settledAt.toISOString(),
       remainingSpendCapCents:
-        agentRow.spendCapCents === null ? null : agentRow.spendCapCents - claims.amount,
+        agentRow.spendCapCents === null ? null : agentRow.spendCapCents - chargeAmount,
     },
   };
 }

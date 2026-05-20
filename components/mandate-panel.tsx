@@ -9,11 +9,12 @@ interface KyaClaims {
   jti: string;
   iat: number;
   exp: number;
-  ssi: string;
-  amount: number;
-  cur: string;
+  ssi?: string;
+  amount?: number;
+  cur?: string;
   hid: { email: string };
-  aid: { id: string; name: string };
+  agentId: string;
+  aid: { id?: string; name: string };
 }
 
 export function MandatePanel({
@@ -60,17 +61,21 @@ export function MandatePanel({
           <dd className="font-medium">
             {claims.aid.name}{" "}
             <span className="font-mono text-xs text-muted-foreground">
-              ({claims.aid.id.slice(0, 12)}…)
+              ({claims.agentId.slice(0, 12)}…)
             </span>
           </dd>
 
           <dt className="text-muted-foreground">Authorized by</dt>
           <dd className="font-medium">{claims.hid.email}</dd>
 
-          <dt className="text-muted-foreground">Amount</dt>
-          <dd className="font-medium">
-            {formatCents(claims.amount)} {claims.cur}
-          </dd>
+          {claims.amount !== undefined && (
+            <>
+              <dt className="text-muted-foreground">Amount</dt>
+              <dd className="font-medium">
+                {formatCents(claims.amount)} {claims.cur ?? "USD"}
+              </dd>
+            </>
+          )}
 
           <dt className="text-muted-foreground">Issued by</dt>
           <dd className="font-mono text-xs">{claims.iss}</dd>

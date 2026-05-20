@@ -24,6 +24,9 @@ export class MockKyaPayProvider implements KyaPayProvider {
         clockTolerance: 0,
       });
       claims = payload as unknown as KyaPayClaims;
+      if (!claims.agentId && claims.aid?.id) {
+        claims.agentId = claims.aid.id;
+      }
     } catch (err) {
       if (err instanceof joseErrors.JWTExpired) {
         return { ok: false, code: "expired", message: "Token expired" };
