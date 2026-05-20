@@ -2,7 +2,184 @@
 
 A reference integration showcasing **Ory** (identity, OAuth2, permissions) and **Skyfire KYAPay** (agent payments) on a generic merchant storefront. Built for Ory by Ory.
 
-> Status: Phase 0 (bootstrap). Real Ory integration starts in Phase 2. See `docs/plans/2026-05-13-architecture-and-roadmap.md` for the full roadmap.
+> Status: Phases 0–9 shipped on `main`. Real Skyfire is wired (mock remains the default). Bose-style embedded-browser flow auto-provisions agents from a valid KYA. See `docs/plans/2026-05-13-architecture-and-roadmap.md` for the roadmap and `docs/plans/phases/` for per-phase plans.
+
+## Demoable flows
+
+Six flows work end-to-end against `pnpm dev` today. Flows 1–5 require no external accounts beyond an Ory Network project (already configured). Flow 6 additionally requires Skyfire creds in `.env.local`.
+
+| # | Flow | What it shows | Skyfire needed? |
+|---|---|---|---|
+| 1 | Human signup → browse → checkout (stub pay) | Ory Kratos session, Keto-gated order viewing | No |
+| 2 | Human registers an agent at `/agents/new` | Ory creates Kratos agent identity + Hydra OAuth client; Keto ownership tuple | No |
+| 3 | MCP agent buys with mock KYA | Agent API-key auth, KYA verification, mandate-panel rendering | No |
+| 4 | Hydra delegated-token bootstrap (KYA → access token w/ `act` + `authorization_details`) | RFC 9396 delegated authorization wired through Ory Hydra | No |
+| 5 | Agent revocation from `/agents` | Hydra client revoke + Keto tuple remove + `revokedAt` stamp | No |
+| 6 | Real Skyfire KYA → auto-provision + charge | JWKS-local verify, auto-create user + agent from Skyfire-attested identity | **Yes** |
+
+### Flow 1 — Human signup → checkout
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Browser
+    participant Merchant as Merchant (Next.js)
+    participant Kratos as Ory Kratos
+    participant Keto as Ory Keto
+    participant DB as SQLite
+
+    User->>Browser: visits /sign-up
+    Browser->>Kratos: self-service flow (hosted UI)
+    Kratos-->>Browser: identity created, session cookie set
+    User->>Browser: adds product, /checkout
+    Browser->>Merchant: POST /api/checkout (cookie)
+    Merchant->>Kratos: toSession(cookie)
+    Kratos-->>Merchant: { user.id, traits }
+    Merchant->>DB: createOrderFromCart()
+    Merchant->>Keto: addTuple(User:<id>#owner@Order:<id>)
+    Merchant-->>Browser: 200 { orderId }
+    Browser->>Merchant: GET /orders/<id>
+    Merchant->>Keto: check(User:<self>#owner@Order:<id>)
+    Keto-->>Merchant: allowed
+    Merchant-->>Browser: order page
+```
+
+### Flow 2 — Human registers an agent
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Browser
+    participant Merchant
+    participant Kratos
+    participant Hydra as Ory Hydra
+    participant Keto
+    participant DB
+
+    User->>Browser: /agents/new (name, spend cap, max/purchase)
+    Browser->>Merchant: POST /agents
+    Merchant->>Kratos: createIdentity(agent schema)
+    Kratos-->>Merchant: agent.id (Kratos UUID)
+    Merchant->>Hydra: createOAuth2Client(client_credentials)
+    Hydra-->>Merchant: client.id + client_secret
+    Merchant->>Keto: addTuple(Agent:<id>#owner@User:<userId>)
+    Merchant->>DB: insert agents row (api-key hash, caps)
+    Merchant-->>Browser: 201 { agentId, mcpApiKey (one-time view) }
+```
+
+### Flow 3 — MCP agent buys with mock KYA
+
+```mermaid
+sequenceDiagram
+    participant Agent as MCP Agent
+    participant Merchant
+    participant Mock as MockKyaPayProvider
+    participant DB
+    participant Keto
+
+    Note over Agent: KYAPAY_PROVIDER=mock
+    Agent->>Merchant: POST /api/mcp (Bearer <agentApiKey>)<br/>tools/list
+    Merchant-->>Agent: 5 tools
+    Agent->>Merchant: tools/call searchProducts
+    Merchant-->>Agent: products
+    Agent->>Merchant: tools/call addToCart(productId, qty)
+    Merchant->>DB: persistent cart agent-cart-<agentId>
+    Agent->>Merchant: tools/call submitCart
+    Merchant-->>Agent: { cartId, total }
+    Agent->>Merchant: (test script) pnpm demo:mint-kya-token<br/>signs JWT with mock keypair
+    Agent->>Merchant: POST /api/checkout<br/>Authorization: KYAPay <jwt><br/>X-Cart-Id: <cartId>
+    Merchant->>Mock: verify(jwt) → claims
+    Merchant->>Merchant: check agentId, hid.email, amount, spend cap
+    Merchant->>Mock: charge(jwt, amount)
+    Mock-->>Merchant: { chargeId: mock-charge-... }
+    Merchant->>DB: createOrderFromCart() + persist KYA claims
+    Merchant->>Keto: addTuple(User:<owner>#owner@Order:<id>)
+    Merchant-->>Agent: 200 { orderId, chargeId, remainingSpendCap }
+```
+
+### Flow 4 — Hydra delegated-token bootstrap (Phase 7)
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Merchant
+    participant Hydra
+    participant KyaPay as KyaPayProvider
+
+    Agent->>Merchant: POST /oauth/login<br/>{ kya_jwt }
+    Merchant->>KyaPay: verify(kya_jwt)
+    KyaPay-->>Merchant: { agentId, hid.email, ... }
+    Merchant->>Merchant: confirm agent row exists, not revoked
+    Merchant->>Hydra: acceptOAuth2LoginRequest<br/>subject=owner, context={agent_id, kya_jti, spend_cap}
+    Hydra-->>Merchant: redirect to /oauth/consent
+    Merchant->>Hydra: acceptOAuth2ConsentRequest<br/>session.access_token={act:{sub:agentId}, authorization_details:[...]}
+    Hydra-->>Agent: 302 → callback with code
+    Agent->>Hydra: token exchange (PKCE)
+    Hydra-->>Agent: access_token (signed JWT, RFC 9396)
+    Note over Agent: token carries: sub=ownerUserId,<br/>act.sub=agentId,<br/>authorization_details: agent_purchase with max_amount
+    Agent->>Merchant: POST /api/checkout<br/>Authorization: Bearer <delegatedToken><br/>KYA-Pay: <kya_jwt>
+    Merchant->>Hydra: introspect bearer (jose verify via JWKS)
+    Hydra-->>Merchant: claims
+    Merchant->>Merchant: validateAndCharge (full gauntlet incl. delegation cross-checks)
+    Merchant-->>Agent: 200 { orderId }
+```
+
+### Flow 5 — Agent revocation
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Browser
+    participant Merchant
+    participant Hydra
+    participant Keto
+    participant DB
+
+    User->>Browser: /agents → "Revoke"
+    Browser->>Merchant: POST /agents/<id>/revoke
+    Merchant->>Hydra: deleteOAuth2Client(hydraClientId)
+    Merchant->>Keto: removeTuple(Agent:<id>#owner@User:<userId>)
+    Merchant->>DB: set agents.revokedAt = now()
+    Merchant-->>Browser: redirect /agents
+    Note over Merchant: subsequent /api/checkout calls<br/>with this agentId → 403 agent_revoked
+```
+
+### Flow 6 — Real Skyfire KYA → auto-provision + charge (Phase 8+9)
+
+```mermaid
+sequenceDiagram
+    participant Bose as Bose Demo (or<br/>pnpm skyfire:mint-kya)
+    participant Skyfire
+    participant Merchant
+    participant Sky as SkyfireKyaPayProvider
+    participant Kratos
+    participant Keto
+    participant DB
+
+    Note over Bose: KYAPAY_PROVIDER=skyfire,<br/>SKYFIRE_BUYER_API_KEY in .env.local
+    Bose->>Skyfire: POST /api/v1/tokens<br/>{type:"kya", sellerDomainOrUrl}<br/>skyfire-api-key: <buyer agent key>
+    Skyfire-->>Bose: { token: <signed JWT> }
+    Bose->>Merchant: POST /api/checkout<br/>skyfire-pay-id: <jwt><br/>X-Cart-Id: <cartId>
+    Merchant->>Sky: verify(jwt)
+    Sky->>Skyfire: GET /.well-known/jwks.json (cached ≤60min)
+    Skyfire-->>Sky: JWKS
+    Sky-->>Merchant: { agentId=sub, hid.email, aid.name, ... }
+    alt user unknown
+        Merchant->>Kratos: createIdentity(user schema, traits.email)
+        Kratos-->>Merchant: ownerUserId
+    end
+    alt agent unknown
+        Merchant->>DB: insert agents row<br/>(id=skyfire sub, hydraClientId="skyfire-attested")
+        Merchant->>Keto: addTuple(Agent:<id>#owner@User:<ownerId>)
+    end
+    Merchant->>Merchant: validateAndCharge<br/>(KYA has no amount → cart total authoritative)
+    Merchant->>Sky: charge(jwt, cart.totalCents)
+    Sky-->>Merchant: { chargeId: sf-<uuid> }
+    Merchant->>DB: createOrderFromCart() + persist KYA claims
+    Merchant-->>Bose: 200 { orderId, chargeId }
+```
+
+---
 
 ## Stack
 
