@@ -41,7 +41,10 @@ export function getPayments(): { kyaPay: KyaPayProvider } {
   }
 
   if (which === "skyfire") {
-    throw new Error("Real Skyfire provider lands in Phase 8");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { SkyfireKyaPayProvider } = require("./skyfire/kyapay");
+    cached = { kyaPay: new SkyfireKyaPayProvider() };
+    return cached;
   }
   throw new Error(`Unknown KYAPAY_PROVIDER: ${which}`);
 }
