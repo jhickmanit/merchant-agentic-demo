@@ -1,22 +1,89 @@
-# Merchant Agentic Demo
+# Ory × Skyfire — Reference Merchant Integration
 
-A reference integration showcasing **Ory** (identity, OAuth2, permissions) and **Skyfire KYAPay** (agent payments) on a generic merchant storefront. Built for Ory by Ory.
+A joint reference implementation showing how to add agent-aware
+authentication and payments to an existing merchant storefront using
+[Ory Network](https://www.ory.sh) (Kratos identity, Keto permissions, Hydra
+OAuth 2.0) and [Skyfire KYAPay](https://docs.skyfire.xyz) (Know-Your-Agent
+tokens). One Next.js application demonstrates the complete picture:
 
-> Status: Phases 0–10 shipped on `main`. Real Skyfire is wired (mock remains the default). The headline flow ([Flow 7](#flow-7--combined-skyfire--ory-headline-demo-phase-10)) takes a Bose-style Skyfire KYA from a cold browser to a Hydra-delegated access token, exercising Kratos identity creation, Keto ownership, and Hydra delegation in a single round-trip. See `docs/plans/2026-05-13-architecture-and-roadmap.md` for the roadmap and `docs/plans/phases/` for per-phase plans.
+- Humans sign in, browse, and check out exactly as on any commerce site.
+- AI agents (Bose-style headless browsers, MCP clients, or programmatic
+  callers) shop on a human's behalf, presenting a Skyfire-issued KYA token
+  the merchant can verify cryptographically.
+- The merchant **auto-provisions** the human identity + agent record from
+  the KYA, **bootstraps a Hydra-issued delegated access token** carrying
+  RFC 9396 `authorization_details`, and processes the order — all without
+  prior registration on the merchant side.
+
+The result is a single drop-in story for merchants asking "how do I support
+agent-driven commerce safely and standardly?" See
+[Flow 7](#flow-7--combined-skyfire--ory-headline-demo-phase-10) for the
+headline demo.
+
+> **Status:** phases 0–11 shipped on `main`. Production-style headless-agent
+> flow works end-to-end against the live Ory project + Skyfire's real
+> JWKS-verified KYA tokens. Mock KYA / mock card paths remain wired for
+> offline development. Roadmap in `docs/plans/2026-05-13-architecture-and-roadmap.md`;
+> per-phase implementation plans in `docs/plans/phases/`.
 
 ## Demoable flows
 
-Seven flows work end-to-end against `pnpm dev` today. Flows 1–5 require no external accounts beyond the configured Ory Network project. Flows 6–7 additionally require Skyfire creds (and Flow 7 needs the `skyfire-bridge` Hydra client — provisioned by `./scripts/ory-setup/hydra-config.sh`).
+Seven flows work end-to-end against `pnpm dev` today. Flows 1–5 only need
+an Ory Network project. Flows 6–7 add Skyfire credentials.
 
-| # | Flow | What it shows | Skyfire needed? |
+| # | Flow | What it shows | Skyfire? |
 |---|---|---|---|
-| 1 | Human signup → browse → checkout (stub pay) | Ory Kratos session, Keto-gated order viewing | No |
-| 2 | Human registers an agent at `/agents/new` | Ory creates Kratos agent identity + Hydra OAuth client; Keto ownership tuple | No |
+| 1 | Human signup → browse → checkout | Ory Kratos session, Keto-gated order viewing, mock card form | No |
+| 2 | Human registers an agent at `/me/agents/new` | Kratos agent identity + Hydra OAuth client + Keto ownership tuple | No |
 | 3 | MCP agent buys with mock KYA | Agent API-key auth, KYA verification, mandate-panel rendering | No |
-| 4 | Hydra delegated-token bootstrap (KYA → access token w/ `act` + `authorization_details`) | RFC 9396 delegated authorization wired through Ory Hydra | No |
-| 5 | Agent revocation from `/agents` | Hydra client revoke + Keto tuple remove + `revokedAt` stamp | No |
-| 6 | Real Skyfire KYA → auto-provision + charge | _Building block for Flow 7._ JWKS-local verify, auto-create user + agent from Skyfire-attested identity | **Yes** |
-| **7** | **Combined Skyfire + Ory (headline demo)** | **KYA → auto-provision → Hydra delegated token → charge, all in one inline server-side step. Exercises Kratos, Keto, and Hydra together from a single Bose-style request.** | **Yes** |
+| 4 | Hydra delegated-token bootstrap | RFC 9396 `act` + `authorization_details` wired through Ory Hydra | No |
+| 5 | Agent revocation from `/me/agents` | Hydra client revoke + Keto tuple remove + `revokedAt` stamp | No |
+| 6 | Real Skyfire KYA → auto-provision + charge | _Building block for Flow 7._ JWKS-local verify, auto-create user + agent | **Yes** |
+| **7** | **Combined Skyfire + Ory (the demo)** | **KYA → Kratos auto-provision → Hydra delegated token → Skyfire charge, all in one server-side step. The full joint story.** | **Yes** |
+
+## Quickstart
+
+```bash
+# 1. Clone + install
+git clone https://github.com/jhickmanit/merchant-agentic-demo && cd merchant-agentic-demo
+pnpm install
+
+# 2. Provision your own Ory tenant (one-time)
+ory auth                              # one-time CLI login to your Ory account
+./scripts/ory-setup/apply.sh          # creates project, applies all config
+
+# 3. Mint an admin API key in the Ory dashboard (link printed by apply.sh)
+#    and add it + the printed bridge client creds to .env.local:
+#      ORY_ADMIN_API_KEY=...
+#      SKYFIRE_BRIDGE_CLIENT_ID=...
+#      SKYFIRE_BRIDGE_CLIENT_SECRET=...
+
+# 4. Database
+pnpm db:migrate && pnpm db:seed
+
+# 5. Start the app + Ory tunnel
+pnpm dev                              # http://localhost:3000
+ory tunnel --project $ORY_PROJECT_ID http://localhost:3000   # in a second terminal
+```
+
+For real Skyfire-issued KYA tokens, also set in `.env.local`:
+
+```
+KYAPAY_PROVIDER=skyfire
+SKYFIRE_BUYER_API_KEY=<your Skyfire buyer-agent API key>
+```
+
+Then exercise Flow 7:
+
+```bash
+pnpm skyfire:mint-kya --sellerDomain http://localhost:3000   # prints a signed JWT
+curl -X POST http://localhost:3000/api/checkout \
+  -H "skyfire-pay-id: <jwt>" -H "X-Cart-Id: <cart>"
+```
+
+Open `/orders/<id>` to see the full provenance chain in the Debug Policy
+Panel (Kratos auto-provision, Keto tuples, Hydra introspect with `act.sub`
++ `authorization_details`, Skyfire KYA claims with `agentId` and `hid.email`).
 
 ### Flow 1 — Human signup → checkout
 
