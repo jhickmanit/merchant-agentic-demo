@@ -74,10 +74,13 @@ export const orders = sqliteTable("orders", {
   id: text("id").primaryKey(),
   cartId: text("cart_id").references(() => carts.id),
   userId: text("user_id"),                       // null for anonymous (phase 1)
-  paymentMethod: text("payment_method").notNull(), // "stub" | "kyapay" (phase 6)
-  paymentTokenJti: text("payment_token_jti"),     // populated in phase 6
-  skyfireChargeId: text("skyfire_charge_id"),     // populated in phase 6
+  paymentMethod: text("payment_method").notNull(), // "stub" | "kyapay" | "mock_card"
+  paymentTokenJti: text("payment_token_jti"),     // populated in phase 6 (kyapay)
+  skyfireChargeId: text("skyfire_charge_id"),     // populated in phase 6 (kyapay)
   kyaClaimsJson: text("kya_claims_json"),          // populated in polish phase PP.3
+  paymentBrand: text("payment_brand"),             // populated in phase 11 (mock_card): visa|mastercard|amex|discover
+  paymentLast4: text("payment_last4"),             // populated in phase 11 (mock_card): 4 digits
+  paymentAuthId: text("payment_auth_id"),          // populated in phase 11 (mock_card): synthetic PSP auth id
   subtotalCents: integer("subtotal_cents").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

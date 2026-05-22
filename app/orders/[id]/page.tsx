@@ -65,6 +65,15 @@ export default async function OrderDetailPage({
         <p className="mt-1 text-sm text-muted-foreground">
           Payment:{" "}
           <span className="font-medium text-foreground">{order.paymentMethod}</span>
+          {order.paymentBrand && order.paymentLast4 && (
+            <>
+              {" · "}
+              <span className="font-medium text-foreground capitalize">
+                {order.paymentBrand}
+              </span>{" "}
+              <span className="font-mono">•••• {order.paymentLast4}</span>
+            </>
+          )}
         </p>
       </header>
       <section className="rounded-lg border">

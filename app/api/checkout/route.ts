@@ -13,8 +13,25 @@ import { bootstrapSkyfireAgent } from "@/lib/agent/skyfire-bridge";
 import type { DelegationClaims } from "@/lib/auth/delegated-token";
 import { cartTotalFromLines } from "@/lib/cart-math";
 import { extractKyaToken } from "@/lib/agent/kya-header";
+import { authorizeCard, type CardInput } from "@/lib/payments/mock-card";
 
-export async function POST() {
+interface CheckoutBody {
+  card?: CardInput;
+}
+
+async function parseBody(req: Request): Promise<CheckoutBody> {
+  if (!req.body) return {};
+  try {
+    const text = await req.text();
+    if (!text) return {};
+    return JSON.parse(text) as CheckoutBody;
+  } catch {
+    return {};
+  }
+}
+
+export async function POST(req: Request) {
+  const body = await parseBody(req);
   const kyaToken = extractKyaToken(await headers());
 
   // ===== Agent path (Bose-style: X-KYA-Token header) =====
@@ -112,10 +129,27 @@ export async function POST() {
         };
       }
     }
+    // Card details, if present, are validated here (Bose-style headless agent
+    // fills the same /checkout form a human would). Card details are OPTIONAL
+    // on the agent path so existing KYA-only / pure-API integrations stay
+    // working — when absent, the order is recorded with KYA provenance only.
+    let cardAuth: { brand: string; last4: string; authId: string } | undefined;
+    if (body.card) {
+      const auth = authorizeCard(body.card);
+      if (!auth.ok) {
+        return NextResponse.json(
+          { error: "card_declined", code: auth.code, field: auth.field, message: auth.message },
+          { status: 400 },
+        );
+      }
+      cardAuth = { brand: auth.brand, last4: auth.last4, authId: auth.authId };
+    }
+
     const result = await validateAndCharge({
       kyaJwt: kyaToken,
       cart: { items, totalCents },
       ctx,
+      cardAuth,
       deps: { db: getDb(), kyaPay, identity, permission },
     });
     return NextResponse.json(result.body, { status: result.status, headers: result.headers });
@@ -137,13 +171,33 @@ export async function POST() {
   if (!cartId) {
     return NextResponse.json({ error: "No cart" }, { status: 400 });
   }
+  // Card details are required on the human path.
+  if (!body.card) {
+    return NextResponse.json(
+      { error: "missing_card", message: "Card details are required to check out." },
+      { status: 400 },
+    );
+  }
+  const auth = authorizeCard(body.card);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: "card_declined", code: auth.code, field: auth.field, message: auth.message },
+      { status: 400 },
+    );
+  }
+
   try {
     const orderId = await createOrderFromCart(
       getDb(),
       cartId,
       current.user.id,
-      "stub",
-      { permissions: permission },
+      "mock_card",
+      {
+        permissions: permission,
+        paymentBrand: auth.brand,
+        paymentLast4: auth.last4,
+        paymentAuthId: auth.authId,
+      },
     );
     return NextResponse.json({ ok: true, orderId });
   } catch (err) {

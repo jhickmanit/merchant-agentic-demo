@@ -21,6 +21,20 @@ export interface ValidateAndChargeArgs {
     cartId: string;
     delegationClaims?: DelegationClaims;
   };
+  /**
+   * Optional mock-card authorization. When the agent fills the merchant's
+   * card form (Bose-style headless browser), the card details are
+   * already-validated upstream; we just persist brand/last4/authId on the
+   * order so the mandate panel can show "Paid via Visa •••• 4242" alongside
+   * the KYA provenance. The actual money movement is still the KYA
+   * `kyaPay.charge()` — card is the funding instrument, KYA is the
+   * agent-provenance envelope.
+   */
+  cardAuth?: {
+    brand: string;
+    last4: string;
+    authId: string;
+  };
   deps: {
     db: DB;
     kyaPay: KyaPayProvider;
@@ -134,6 +148,9 @@ export async function validateAndCharge(
       paymentTokenJti: claims.jti,
       skyfireChargeId: chargeResult.chargeId,
       kyaClaimsJson: JSON.stringify(claims),
+      paymentBrand: args.cardAuth?.brand,
+      paymentLast4: args.cardAuth?.last4,
+      paymentAuthId: args.cardAuth?.authId,
     },
   );
 

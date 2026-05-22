@@ -8,12 +8,15 @@ export async function createOrderFromCart(
   db: DB,
   cartId: string,
   userId: string,
-  paymentMethod: "stub" | "kyapay",
+  paymentMethod: "stub" | "kyapay" | "mock_card",
   opts?: {
     permissions?: PermissionProvider;
     paymentTokenJti?: string;
     skyfireChargeId?: string;
     kyaClaimsJson?: string;
+    paymentBrand?: string;
+    paymentLast4?: string;
+    paymentAuthId?: string;
   },
 ): Promise<string> {
   const lines = await db.query.cartItems.findMany({
@@ -38,6 +41,9 @@ export async function createOrderFromCart(
       paymentTokenJti: opts?.paymentTokenJti ?? null,
       skyfireChargeId: opts?.skyfireChargeId ?? null,
       kyaClaimsJson: opts?.kyaClaimsJson ?? null,
+      paymentBrand: opts?.paymentBrand ?? null,
+      paymentLast4: opts?.paymentLast4 ?? null,
+      paymentAuthId: opts?.paymentAuthId ?? null,
     }).run();
     tx.insert(orderItems).values(
       lines.map((l) => ({
