@@ -11,21 +11,10 @@ import { validateAndCharge } from "@/lib/agent/validate-and-charge";
 import { ensureAgentAndOwner } from "@/lib/agent/auto-provision";
 import type { DelegationClaims } from "@/lib/auth/delegated-token";
 import { cartTotalFromLines } from "@/lib/cart-math";
-
-async function extractKyaToken(): Promise<string | null> {
-  const hs = await headers();
-  // Skyfire's documented header for embedded-browser-style agents (e.g. Bose demo).
-  const skyfirePayId = hs.get("skyfire-pay-id");
-  if (skyfirePayId) return skyfirePayId;
-  const xKya = hs.get("x-kya-token");
-  if (xKya) return xKya;
-  const auth = hs.get("authorization");
-  if (auth?.toLowerCase().startsWith("kyapay ")) return auth.slice(7).trim();
-  return null;
-}
+import { extractKyaToken } from "@/lib/agent/kya-header";
 
 export async function POST() {
-  const kyaToken = await extractKyaToken();
+  const kyaToken = extractKyaToken(await headers());
 
   // ===== Agent path (Bose-style: X-KYA-Token header) =====
   if (kyaToken) {
