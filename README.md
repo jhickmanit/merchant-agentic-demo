@@ -2,11 +2,11 @@
 
 A reference integration showcasing **Ory** (identity, OAuth2, permissions) and **Skyfire KYAPay** (agent payments) on a generic merchant storefront. Built for Ory by Ory.
 
-> Status: Phases 0–9 shipped on `main`. Real Skyfire is wired (mock remains the default). Bose-style embedded-browser flow auto-provisions agents from a valid KYA. See `docs/plans/2026-05-13-architecture-and-roadmap.md` for the roadmap and `docs/plans/phases/` for per-phase plans.
+> Status: Phases 0–10 shipped on `main`. Real Skyfire is wired (mock remains the default). The headline flow ([Flow 7](#flow-7--combined-skyfire--ory-headline-demo-phase-10)) takes a Bose-style Skyfire KYA from a cold browser to a Hydra-delegated access token, exercising Kratos identity creation, Keto ownership, and Hydra delegation in a single round-trip. See `docs/plans/2026-05-13-architecture-and-roadmap.md` for the roadmap and `docs/plans/phases/` for per-phase plans.
 
 ## Demoable flows
 
-Six flows work end-to-end against `pnpm dev` today. Flows 1–5 require no external accounts beyond an Ory Network project (already configured). Flow 6 additionally requires Skyfire creds in `.env.local`.
+Seven flows work end-to-end against `pnpm dev` today. Flows 1–5 require no external accounts beyond the configured Ory Network project. Flows 6–7 additionally require Skyfire creds (and Flow 7 needs the `skyfire-bridge` Hydra client — provisioned by `./scripts/ory-setup/hydra-config.sh`).
 
 | # | Flow | What it shows | Skyfire needed? |
 |---|---|---|---|
@@ -15,7 +15,8 @@ Six flows work end-to-end against `pnpm dev` today. Flows 1–5 require no exter
 | 3 | MCP agent buys with mock KYA | Agent API-key auth, KYA verification, mandate-panel rendering | No |
 | 4 | Hydra delegated-token bootstrap (KYA → access token w/ `act` + `authorization_details`) | RFC 9396 delegated authorization wired through Ory Hydra | No |
 | 5 | Agent revocation from `/agents` | Hydra client revoke + Keto tuple remove + `revokedAt` stamp | No |
-| 6 | Real Skyfire KYA → auto-provision + charge | JWKS-local verify, auto-create user + agent from Skyfire-attested identity | **Yes** |
+| 6 | Real Skyfire KYA → auto-provision + charge | _Building block for Flow 7._ JWKS-local verify, auto-create user + agent from Skyfire-attested identity | **Yes** |
+| **7** | **Combined Skyfire + Ory (headline demo)** | **KYA → auto-provision → Hydra delegated token → charge, all in one inline server-side step. Exercises Kratos, Keto, and Hydra together from a single Bose-style request.** | **Yes** |
 
 ### Flow 1 — Human signup → checkout
 
@@ -144,7 +145,9 @@ sequenceDiagram
     Note over Merchant: subsequent /api/checkout calls<br/>with this agentId → 403 agent_revoked
 ```
 
-### Flow 6 — Real Skyfire KYA → auto-provision + charge (Phase 8+9)
+### Flow 6 — Real Skyfire KYA → auto-provision + charge (Phase 8+9 — building block)
+
+> _This is the underlying building block; [Flow 7](#flow-7--combined-skyfire--ory-headline-demo-phase-10) is the demo headline. Flow 6 alone produces a kyapay order but does **not** mint a Hydra delegated token — useful for "Skyfire-only, no Hydra" deployments or for understanding the auto-provision half of Flow 7 in isolation._
 
 ```mermaid
 sequenceDiagram
@@ -178,6 +181,50 @@ sequenceDiagram
     Merchant->>DB: createOrderFromCart() + persist KYA claims
     Merchant-->>Bose: 200 { orderId, chargeId }
 ```
+
+### Flow 7 — Combined Skyfire + Ory (headline demo, Phase 10)
+
+The penultimate demo flow. A single Bose-style `/api/checkout` request, carrying only a Skyfire KYA, drives every Ory product (Kratos auto-provision, Keto ownership tuple, Hydra delegated access token with RFC 9396 `authorization_details`) plus Skyfire settlement, server-side, in one round-trip. No prior user or agent registration required. See `docs/plans/phases/phase-10-combined-skyfire-delegation.md` for the design.
+
+```mermaid
+sequenceDiagram
+    participant Bose as Bose Demo (or<br/>pnpm skyfire:mint-kya)
+    participant Skyfire
+    participant Merchant
+    participant Bridge as skyfire-bridge<br/>(lib/agent/skyfire-bridge.ts)
+    participant Hydra as Ory Hydra
+    participant Kratos
+    participant Keto
+    participant DB
+
+    Note over Bose: KYAPAY_PROVIDER=skyfire,<br/>SKYFIRE_BRIDGE_CLIENT_ID/SECRET in .env.local
+    Bose->>Skyfire: POST /api/v1/tokens {type:"kya", sellerDomain}
+    Skyfire-->>Bose: { token: <signed JWT> }
+    Bose->>Merchant: POST /api/checkout<br/>skyfire-pay-id: <jwt> (or x-kya-token / Authorization: KYAPay / Bearer)
+    Merchant->>Merchant: extractKyaToken() + kyaPay.verify()
+    Merchant->>Bridge: bootstrapSkyfireAgent(kya, claims, deps)
+    Note over Bridge: cache hit on claims.jti? skip the round-trip
+    Bridge->>Kratos: createIdentity if hid.email unknown
+    Bridge->>DB: insert agents row<br/>(id=claims.agentId, hydraClientId="skyfire-attested")
+    Bridge->>Keto: addTuple(Agent:<id>#owner@User:<ownerId>)
+    Bridge->>Hydra: /oauth2/auth (bridge client_id, kya_bootstrap cookie)
+    Hydra->>Merchant: GET /oauth/login (login_challenge)
+    Merchant->>Merchant: verify KYA again + check client_id↔agent binding
+    Merchant->>Hydra: acceptOAuth2LoginRequest(subject=ownerId, context={agent_id, kya_jti})
+    Hydra->>Merchant: GET /oauth/consent (consent_challenge)
+    Merchant->>Hydra: acceptOAuth2ConsentRequest<br/>(session.access_token={act:{sub:agentId}, authorization_details:[...]})
+    Hydra-->>Bridge: 302 → callback with code
+    Bridge->>Hydra: POST /oauth2/token (code exchange)
+    Hydra-->>Bridge: ory_at_… delegated access token
+    Bridge->>Hydra: /admin/oauth2/introspect → DelegationClaims (sub, act.sub, authorization_details)
+    Bridge-->>Merchant: { accessToken, delegationClaims, ownerUserId, agentId }
+    Merchant->>Merchant: validateAndCharge — same path as flow 4<br/>(act.sub == agentId? sub == ownerUserId? max_amount?)
+    Merchant->>Skyfire: charge(jwt, cart.totalCents) → sf-<uuid>
+    Merchant->>DB: createOrderFromCart() + persist KYA claims
+    Merchant-->>Bose: 200 { orderId, chargeId }
+```
+
+If `SKYFIRE_BRIDGE_CLIENT_ID/SECRET` aren't configured, `/api/checkout` falls back to Flow 6 behavior (plain auto-provision, no delegated token) so the demo doesn't collapse during early setup. Look for `[checkout] skyfire-bridge bootstrap failed` in the dev log if you expected delegation but got the fallback.
 
 ---
 
