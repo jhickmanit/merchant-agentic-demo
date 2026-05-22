@@ -9,6 +9,7 @@ import { CART_COOKIE_NAME, parseCartIdFromCookie } from "@/lib/cart-cookie";
 import { verifyAgentBearer } from "@/lib/auth/agent-gate";
 import { validateAndCharge } from "@/lib/agent/validate-and-charge";
 import { ensureAgentAndOwner } from "@/lib/agent/auto-provision";
+import { bootstrapSkyfireAgent } from "@/lib/agent/skyfire-bridge";
 import type { DelegationClaims } from "@/lib/auth/delegated-token";
 import { cartTotalFromLines } from "@/lib/cart-math";
 import { extractKyaToken } from "@/lib/agent/kya-header";
@@ -60,16 +61,56 @@ export async function POST() {
           { status: 400, headers: { "WWW-Authenticate": `KYAPay realm="merchant-agentic-demo"` } },
         );
       }
-      const provisioned = await ensureAgentAndOwner(pre.claims, {
-        db: getDb(),
-        identity,
-        permission,
-      });
-      ctx = {
-        agentId: provisioned.agentId,
-        ownerUserId: provisioned.ownerUserId,
-        cartId: cartId ?? "",
-      };
+
+      // Phase 10 (flow 7) — if the skyfire-bridge Hydra client is configured,
+      // bootstrap a real delegated token so downstream validation runs the
+      // same path as the Phase 7 Hydra-bearer flow. Falls back gracefully to
+      // Phase 9 plain auto-provision if the bridge isn't set up — demo still
+      // works, just without the Hydra story.
+      const bridgeConfigured =
+        process.env.SKYFIRE_BRIDGE_CLIENT_ID && process.env.SKYFIRE_BRIDGE_CLIENT_SECRET;
+
+      if (bridgeConfigured) {
+        try {
+          const bridged = await bootstrapSkyfireAgent(kyaToken, pre.claims, {
+            db: getDb(),
+            identity,
+            permission,
+          });
+          ctx = {
+            agentId: bridged.agentId,
+            ownerUserId: bridged.ownerUserId,
+            cartId: cartId ?? "",
+            delegationClaims: bridged.delegationClaims,
+          };
+        } catch (err) {
+          console.error(
+            "[checkout] skyfire-bridge bootstrap failed, falling back to plain auto-provision:",
+            (err as Error).message,
+          );
+          const provisioned = await ensureAgentAndOwner(pre.claims, {
+            db: getDb(),
+            identity,
+            permission,
+          });
+          ctx = {
+            agentId: provisioned.agentId,
+            ownerUserId: provisioned.ownerUserId,
+            cartId: cartId ?? "",
+          };
+        }
+      } else {
+        const provisioned = await ensureAgentAndOwner(pre.claims, {
+          db: getDb(),
+          identity,
+          permission,
+        });
+        ctx = {
+          agentId: provisioned.agentId,
+          ownerUserId: provisioned.ownerUserId,
+          cartId: cartId ?? "",
+        };
+      }
     }
     const result = await validateAndCharge({
       kyaJwt: kyaToken,
