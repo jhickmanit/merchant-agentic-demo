@@ -1,9 +1,9 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/db";
 import { getAuth } from "@/lib/auth";
+import { buildSessionRequest } from "@/lib/auth/request";
 import { registerAgent, revokeAgent } from "@/lib/agents";
 
 interface RegisterFormData {
@@ -14,11 +14,8 @@ interface RegisterFormData {
 }
 
 export async function registerAgentAction(input: RegisterFormData) {
-  const store = await cookies();
   const { session, identity, oauth2, permission } = getAuth();
-  const current = await session.getCurrentSession({
-    cookies: { get: (n: string) => store.get(n) },
-  });
+  const current = await session.getCurrentSession(await buildSessionRequest());
   if (!current) throw new Error("Not signed in");
 
   const result = await registerAgent(getDb(), { identity, oauth2, permission }, {
@@ -34,11 +31,8 @@ export async function registerAgentAction(input: RegisterFormData) {
 }
 
 export async function revokeAgentAction(agentId: string) {
-  const store = await cookies();
   const { session, oauth2, permission } = getAuth();
-  const current = await session.getCurrentSession({
-    cookies: { get: (n: string) => store.get(n) },
-  });
+  const current = await session.getCurrentSession(await buildSessionRequest());
   if (!current) throw new Error("Not signed in");
 
   await revokeAgent(getDb(), { oauth2, permission }, agentId, current.user.id);

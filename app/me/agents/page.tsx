@@ -1,18 +1,15 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { getAuth } from "@/lib/auth";
+import { buildSessionRequest } from "@/lib/auth/request";
 import { listAgentsForUser } from "@/lib/agents";
 import { Button } from "@/components/ui/button";
 import { AgentCard } from "@/components/agent-card";
 
 export default async function AgentsPage() {
-  const store = await cookies();
   const { session } = getAuth();
-  const current = await session.getCurrentSession({
-    cookies: { get: (n: string) => store.get(n) },
-  });
+  const current = await session.getCurrentSession(await buildSessionRequest());
   if (!current) redirect("/login?return_to=/me/agents");
 
   const agents = await listAgentsForUser(getDb(), current.user.id);

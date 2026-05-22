@@ -95,7 +95,10 @@ export async function POST() {
   const store = await cookies();
   const { session, permission } = getAuth();
   const current = await session.getCurrentSession({
-    cookies: { get: (n: string) => store.get(n) },
+    cookies: {
+      get: (n: string) => store.get(n),
+      getAll: () => store.getAll().map((c) => ({ name: c.name, value: c.value })),
+    },
   });
   if (!current) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });

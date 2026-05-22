@@ -10,8 +10,12 @@ interface Context {
 export function runSessionsContract(name: string, makeProviders: () => Promise<Context>) {
   describe(`${name} — SessionProvider contract`, () => {
     function makeReq(cookieName: string, value?: string) {
+      const all = value ? [{ name: cookieName, value }] : [];
       return {
-        cookies: { get: (n: string) => (n === cookieName && value ? { value } : undefined) },
+        cookies: {
+          get: (n: string) => (n === cookieName && value ? { value } : undefined),
+          getAll: () => all,
+        },
       };
     }
 

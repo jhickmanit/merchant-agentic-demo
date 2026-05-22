@@ -193,38 +193,96 @@ Next.js 16 (App Router) · React 19 · Tailwind v4 · shadcn/ui · Drizzle + SQL
 
 ## Setup
 
+### 1. Install + env
+
 ```bash
 pnpm install
 cp .env.example .env.local
-# Edit .env.local — set ORY_ADMIN_API_KEY from the Ory console (Project Settings → API Keys)
+```
+
+Edit `.env.local`:
+
+- `ORY_ADMIN_API_KEY` — create in the Ory console (Project Settings → API Keys). Required for admin operations (agent identity creation, e2e test-user provisioning, Hydra client management).
+- `ORY_SDK_URL` — see the **Ory Tunnel** section below. Defaults to the project's `oryapis.com` URL, but for browser sign-in on localhost you must change this to `http://localhost:4000`.
+
+### 2. Database
+
+```bash
 pnpm db:migrate
 pnpm db:seed
 ```
 
-## Run
+### 3. Ory project configuration
+
+The Ory project (`f5798507-b1c0-4168-9fd8-7eeb7a40d75c`, name `SkyfireOryDemo`) is **already configured**; testers don't need to touch it. The source of truth lives in `scripts/ory-setup/`:
+
+- `identity-schemas/user.schema.json` + `agent.schema.json` — Kratos schemas
+- `keto-namespaces/namespaces.ts` — Keto OPL
+- `hydra-config.sh` — Hydra Login/Consent URLs (must point at `http://localhost:4000/oauth/login` + `/oauth/consent` when running via the tunnel; **not** at `http://localhost:3000` directly — that breaks the cookie domain)
+- `return-urls.sh` — Account Experience post-login redirect URLs
+
+To re-apply config (project owner only):
 
 ```bash
-pnpm dev          # http://localhost:3000
-pnpm test         # Vitest unit tests
-pnpm test:e2e     # Playwright e2e tests
+./scripts/ory-setup/apply.sh
+```
+
+`apply.sh` is idempotent; existing identities and tuples are preserved.
+
+## Run (REQUIRED: Ory Tunnel)
+
+Sign-in is hosted by **Ory Account Experience**. The hosted UI sets its session cookie on `*.oryapis.com`, which a browser will **not** send back to `http://localhost:3000`. Without the tunnel you'll hit one of these symptoms:
+
+- Sign-in succeeds, but every subsequent page redirects back to `/login` (no session cookie reaching the app)
+- After several redirect-loop iterations, Ory's edge rate-limits you and the browser shows **`ERR_CONNECTION_REFUSED`** or **`429 Too Many Requests`**
+
+The **Ory Tunnel** proxies Ory under `http://localhost:4000` so the Kratos cookie is set on `localhost` and shared with the app on `:3000`.
+
+```bash
+# Terminal 1 — the app
+pnpm dev                # http://localhost:3000
+
+# Terminal 2 — the tunnel (must stay running)
+ory tunnel --project f5798507-b1c0-4168-9fd8-7eeb7a40d75c http://localhost:3000
+# Now http://localhost:4000 fronts Ory (Kratos public + Hosted UI)
+```
+
+Then in `.env.local`, point the SDK at the tunnel:
+
+```
+ORY_SDK_URL=http://localhost:4000
+```
+
+Restart `pnpm dev` after changing `.env.local`. Browse to `http://localhost:3000` (not `:4000` — only the tunnel is on `:4000`); the app will redirect you through the tunnel for sign-in and back, with the session cookie now landing on `localhost`.
+
+### Cookie name (project-agnostic)
+
+Ory Network sets the browser session cookie as `ory_session_<slug>` where `<slug>` is your project's hostname prefix with hyphens stripped — for SkyfireOryDemo it's `ory_session_eagerdhawanmio9f9ilcu`. The merchant's middleware and `OrySessionProvider` discover this by matching any cookie named `ory_kratos_session` *or* starting with `ory_session_`, so you can point this codebase at any Ory Network project without changing code. (Self-hosted Kratos sets `ory_kratos_session` by default, also matched.)
+
+### Troubleshooting browser sign-in
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `ERR_CONNECTION_REFUSED` after submitting sign-in form | Redirect loop got rate-limited by Ory's edge | Start `ory tunnel` (above) and set `ORY_SDK_URL=http://localhost:4000` |
+| `429 Too Many Requests` from `*.oryapis.com` | Same as above | Same as above; wait a few minutes for the rate-limit window to reset |
+| `ERR_TOO_MANY_REDIRECTS` between `/login` ↔ `/auth/callback` even with tunnel running | Stale clone where `getCurrentSession` only looked for `ory_kratos_session`, missing Ory Network's `ory_session_<slug>` | Pull latest `main` — `OrySessionProvider` now matches by prefix |
+| Signed in but `/me`, `/orders`, `/checkout` redirect back to `/login` | Session cookie not reaching the app (cross-domain) | Confirm tunnel is running and `ORY_SDK_URL` points at `:4000`, then sign in again |
+| Tunnel command exits immediately with `ory: command not found` | CLI not installed | `brew install ory/tap/cli && ory auth` |
+
+The e2e suite (`pnpm test:e2e`) does **not** need the tunnel — it uses session-token injection via the admin API; see `e2e/fixtures/test-identity.ts`.
+
+## Other commands
+
+```bash
+pnpm test                # Vitest unit tests
+pnpm test:e2e            # Playwright e2e (no tunnel required)
 pnpm exec tsc --noEmit   # Typecheck
-pnpm lint         # ESLint
+pnpm lint                # ESLint
 ```
 
 ## Sign in
 
-Anonymous browsing works without an account. To check out (or visit `/cart`, `/orders`, or `/me`), you must sign in.
-
-Sign-in is hosted by **Ory Account Experience** at the project's URL. For local development against the hosted UI you'll need **Ory Tunnel** to avoid cross-domain cookie issues:
-
-```bash
-# In a separate terminal, with pnpm dev already running on :3000:
-ory tunnel --project f5798507-b1c0-4168-9fd8-7eeb7a40d75c http://localhost:3000
-```
-
-The tunnel proxies Ory under the same origin as your app (defaults to `http://localhost:4000`), so the Kratos session cookie can be set on the right domain.
-
-**Without the tunnel:** the e2e tests work (they use session-token injection — see `e2e/fixtures/test-identity.ts`), but interactive sign-in via the hosted UI will fail with a redirect loop. See `docs/decisions.md` once Phase 10 polish adds the production custom-domain path.
+Anonymous browsing works without an account. To check out (or visit `/cart`, `/orders`, or `/me`), you must sign in via the hosted Account Experience — which, on localhost, **requires the Ory Tunnel** to be running (see above).
 
 ### Test users for e2e
 

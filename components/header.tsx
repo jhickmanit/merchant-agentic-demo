@@ -4,6 +4,7 @@ import { CART_COOKIE_NAME, parseCartIdFromCookie } from "@/lib/cart-cookie";
 import { getDb } from "@/db";
 import { getCartWithItems } from "@/lib/cart";
 import { getAuth } from "@/lib/auth";
+import { buildSessionRequest } from "@/lib/auth/request";
 import { ThemeToggle } from "./theme-toggle";
 import { AuthButton } from "./auth-button";
 import { Button } from "@/components/ui/button";
@@ -19,9 +20,7 @@ async function cartItemCount(): Promise<number> {
 
 async function currentUser() {
   const { session } = getAuth();
-  const store = await cookies();
-  const req = { cookies: { get: (n: string) => store.get(n) } };
-  const result = await session.getCurrentSession(req);
+  const result = await session.getCurrentSession(await buildSessionRequest());
   return result?.user ?? null;
 }
 

@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { getDb } from "@/db";
 import { getAuth } from "@/lib/auth";
+import { buildSessionRequest } from "@/lib/auth/request";
 import { getOrderById } from "@/lib/orders";
 import { formatCents } from "@/lib/format";
 import { withRecording, getRecordedChecks } from "@/lib/permissions-debug";
@@ -9,11 +9,8 @@ import { DebugPolicyPanel } from "@/components/debug-policy-panel";
 import { MandatePanel } from "@/components/mandate-panel";
 
 async function loadAndCheck(id: string) {
-  const store = await cookies();
   const { session, permission } = getAuth();
-  const current = await session.getCurrentSession({
-    cookies: { get: (n: string) => store.get(n) },
-  });
+  const current = await session.getCurrentSession(await buildSessionRequest());
   if (!current) {
     return { kind: "redirect" as const, to: `/login?return_to=/orders/${id}` };
   }

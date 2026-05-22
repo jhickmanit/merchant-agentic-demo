@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import type { SessionProvider } from "@/lib/auth/sessions";
+import type { SessionProvider, SessionRequest } from "@/lib/auth/sessions";
 import type { Session, User } from "@/lib/auth/types";
 import type { IdentityProvider } from "@/lib/auth/identity";
 
@@ -22,7 +22,7 @@ export class MemorySessionProvider implements SessionProvider {
     return { session, cookieValue };
   }
 
-  async getCurrentSession(req: { cookies: { get: (name: string) => { value: string } | undefined } }): Promise<{ session: Session; user: User } | null> {
+  async getCurrentSession(req: SessionRequest): Promise<{ session: Session; user: User } | null> {
     const cookie = req.cookies.get(this.cookieName);
     if (!cookie) return null;
     const session = this.byCookie.get(cookie.value);

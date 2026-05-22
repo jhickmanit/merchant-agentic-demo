@@ -1,14 +1,11 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAuth } from "@/lib/auth";
+import { buildSessionRequest } from "@/lib/auth/request";
 import { RegisterAgentForm } from "@/components/register-agent-form";
 
 export default async function NewAgentPage() {
-  const store = await cookies();
   const { session } = getAuth();
-  const current = await session.getCurrentSession({
-    cookies: { get: (n: string) => store.get(n) },
-  });
+  const current = await session.getCurrentSession(await buildSessionRequest());
   if (!current) redirect("/login?return_to=/me/agents/new");
 
   return (

@@ -1,11 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED = ["/cart", "/checkout", "/orders", "/me"];
-const ORY_SESSION_COOKIE = "ory_kratos_session";
 const MEMORY_SESSION_COOKIE = "memory_session";
 
+// Ory Network sets the browser session cookie as `ory_session_<slug>` (project-specific);
+// self-hosted Kratos uses `ory_kratos_session`. Match either by prefix so this works for
+// any Ory project without hardcoding a slug.
+function hasOrySessionCookie(req: NextRequest): boolean {
+  return req.cookies.getAll().some(
+    (c) => c.name === "ory_kratos_session" || c.name.startsWith("ory_session_"),
+  );
+}
+
 function hasSessionCookie(req: NextRequest): boolean {
-  return Boolean(req.cookies.get(ORY_SESSION_COOKIE) || req.cookies.get(MEMORY_SESSION_COOKIE));
+  return hasOrySessionCookie(req) || Boolean(req.cookies.get(MEMORY_SESSION_COOKIE));
 }
 
 export function middleware(req: NextRequest) {

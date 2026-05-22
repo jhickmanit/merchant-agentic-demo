@@ -1,16 +1,12 @@
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getAuth } from "@/lib/auth";
-
-async function buildReq() {
-  const store = await cookies();
-  return { cookies: { get: (n: string) => store.get(n) } };
-}
+import { buildSessionRequest } from "@/lib/auth/request";
 
 export default async function MePage() {
   const { session } = getAuth();
-  const result = await session.getCurrentSession(await buildReq());
+  const result = await session.getCurrentSession(await buildSessionRequest());
   if (!result) redirect("/login?return_to=/me");
   void headers; // forces dynamic rendering
   return (

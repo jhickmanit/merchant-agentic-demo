@@ -1,17 +1,14 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { getAuth } from "@/lib/auth";
+import { buildSessionRequest } from "@/lib/auth/request";
 import { listOrdersForUser } from "@/lib/orders";
 import { formatCents } from "@/lib/format";
 
 export default async function OrdersPage() {
-  const store = await cookies();
   const { session } = getAuth();
-  const current = await session.getCurrentSession({
-    cookies: { get: (n: string) => store.get(n) },
-  });
+  const current = await session.getCurrentSession(await buildSessionRequest());
   if (!current) redirect("/login?return_to=/orders");
 
   const orders = await listOrdersForUser(getDb(), current.user.id);

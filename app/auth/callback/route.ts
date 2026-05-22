@@ -8,7 +8,12 @@ import { CART_COOKIE_NAME, CART_COOKIE_MAX_AGE, parseCartIdFromCookie } from "@/
 export async function GET(req: Request) {
   const { session } = getAuth();
   const store = await cookies();
-  const reqLike = { cookies: { get: (n: string) => store.get(n) } };
+  const reqLike = {
+    cookies: {
+      get: (n: string) => store.get(n),
+      getAll: () => store.getAll().map((c) => ({ name: c.name, value: c.value })),
+    },
+  };
   const current = await session.getCurrentSession(reqLike);
   const url = new URL(req.url);
   const returnTo = url.searchParams.get("return_to") ?? "/";

@@ -1,16 +1,23 @@
-import type { SessionProvider } from "@/lib/auth/sessions";
+import type { SessionProvider, SessionRequest } from "@/lib/auth/sessions";
 import type { Session, User } from "@/lib/auth/types";
 import { Configuration, IdentityApi } from "@ory/client";
 import { frontend } from "./client";
 
-const ORY_SESSION_COOKIE = "ory_kratos_session";
+// Ory Network sets the browser session cookie as `ory_session_<slug>` (project-specific).
+// Self-hosted Kratos uses `ory_kratos_session`. We just detect any of these by prefix so this
+// works for any project without hardcoding a slug.
+function isOrySessionCookieName(name: string): boolean {
+  return name === "ory_kratos_session" || name.startsWith("ory_session_");
+}
 
 export class OrySessionProvider implements SessionProvider {
-  readonly cookieName = ORY_SESSION_COOKIE;
+  readonly cookieName = "ory_kratos_session"; // fallback label; real lookup is dynamic
 
-  async getCurrentSession(req: { cookies: { get: (name: string) => { value: string } | undefined } }): Promise<{ session: Session; user: User } | null> {
-    const cookie = req.cookies.get(this.cookieName);
-    if (!cookie) return null;
+  async getCurrentSession(req: SessionRequest): Promise<{ session: Session; user: User } | null> {
+    const match = req.cookies.getAll().find((c) => isOrySessionCookieName(c.name));
+    if (!match) return null;
+    const cookie = { value: match.value };
+    const matchedName = match.name;
     try {
       // Session tokens (from native login flows, e.g. e2e test fixtures) start with "ory_st_".
       // Try xSessionToken first for those, then fall back to cookie-based validation.
@@ -18,7 +25,7 @@ export class OrySessionProvider implements SessionProvider {
       const result = await frontend.toSession(
         isSessionToken
           ? { xSessionToken: cookie.value }
-          : { cookie: `${this.cookieName}=${cookie.value}` },
+          : { cookie: `${matchedName}=${cookie.value}` },
       );
       const s = result.data;
       const traits = (s.identity?.traits ?? {}) as { email: string; name?: { first?: string; last?: string } };
@@ -31,7 +38,13 @@ export class OrySessionProvider implements SessionProvider {
         },
         user: { id: s.identity?.id ?? "", email: traits.email, name: name || undefined },
       };
-    } catch {
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const data = (err as { response?: { data?: unknown } })?.response?.data;
+      console.error(
+        `[OrySessionProvider] toSession failed for cookie=${matchedName} status=${status}`,
+        data ?? (err as Error).message,
+      );
       return null;
     }
   }
