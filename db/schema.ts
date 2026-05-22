@@ -81,6 +81,7 @@ export const orders = sqliteTable("orders", {
   paymentBrand: text("payment_brand"),             // populated in phase 11 (mock_card): visa|mastercard|amex|discover
   paymentLast4: text("payment_last4"),             // populated in phase 11 (mock_card): 4 digits
   paymentAuthId: text("payment_auth_id"),          // populated in phase 11 (mock_card): synthetic PSP auth id
+  policyEventsJson: text("policy_events_json"),    // populated by checkout: PolicyEvent[] for the DebugPolicyPanel
   subtotalCents: integer("subtotal_cents").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

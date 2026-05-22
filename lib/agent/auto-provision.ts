@@ -4,6 +4,7 @@ import { agents } from "@/db/schema";
 import type { KyaPayClaims } from "@/lib/payments/types";
 import type { IdentityProvider } from "@/lib/auth/identity";
 import type { PermissionProvider } from "@/lib/auth/permissions";
+import { recordPolicyEvent } from "@/lib/permissions-debug";
 
 export interface AutoProvisionDeps {
   db: DB;
@@ -30,6 +31,7 @@ export async function ensureAgentAndOwner(
   claims: KyaPayClaims,
   deps: AutoProvisionDeps,
 ): Promise<AutoProvisionResult> {
+  const t0 = Date.now();
   const email = claims.hid.email;
   let owner = await deps.identity.getByEmail(email);
   let createdOwner = false;
@@ -73,6 +75,17 @@ export async function ensureAgentAndOwner(
       );
     }
   }
+
+  recordPolicyEvent({
+    kind: "auto_provision",
+    data: {
+      createdOwner,
+      createdAgent,
+      ownerEmail: email,
+      agentId: claims.agentId,
+      durationMs: Date.now() - t0,
+    },
+  });
 
   return {
     ownerUserId: owner.id,

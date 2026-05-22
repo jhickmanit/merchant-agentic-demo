@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `policy_events_json` text;

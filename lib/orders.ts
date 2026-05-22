@@ -17,6 +17,7 @@ export async function createOrderFromCart(
     paymentBrand?: string;
     paymentLast4?: string;
     paymentAuthId?: string;
+    policyEventsJson?: string;
   },
 ): Promise<string> {
   const lines = await db.query.cartItems.findMany({
@@ -44,6 +45,7 @@ export async function createOrderFromCart(
       paymentBrand: opts?.paymentBrand ?? null,
       paymentLast4: opts?.paymentLast4 ?? null,
       paymentAuthId: opts?.paymentAuthId ?? null,
+      policyEventsJson: opts?.policyEventsJson ?? null,
     }).run();
     tx.insert(orderItems).values(
       lines.map((l) => ({

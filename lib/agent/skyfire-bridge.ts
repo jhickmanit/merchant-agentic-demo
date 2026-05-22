@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth/delegated-token";
 import { bootstrapDelegatedToken } from "@/lib/oauth/bootstrap";
 import { ensureAgentAndOwner, type AutoProvisionDeps } from "@/lib/agent/auto-provision";
+import { recordPolicyEvent } from "@/lib/permissions-debug";
 
 /**
  * Phase 10 — the "flow 7" entry point.
@@ -66,8 +67,13 @@ export async function bootstrapSkyfireAgent(
   claims: KyaPayClaims,
   deps: SkyfireBridgeDeps,
 ): Promise<SkyfireBridgeResult> {
+  const t0 = Date.now();
   const cached = TOKEN_CACHE.get(claims.jti);
   if (cached && cached.expiresAt > Date.now()) {
+    recordPolicyEvent({
+      kind: "hydra_bootstrap",
+      data: { ok: true, cacheHit: true, durationMs: Date.now() - t0 },
+    });
     return { ...cached.result, bootstrapped: false };
   }
 
@@ -87,28 +93,58 @@ export async function bootstrapSkyfireAgent(
   }
 
   const bootstrap = deps.bootstrap ?? bootstrapDelegatedToken;
-  const tokenResult = await bootstrap({
-    kyaJwt,
-    clientId,
-    clientSecret,
+  const bootstrapStart = Date.now();
+  let tokenResult: Awaited<ReturnType<typeof bootstrapDelegatedToken>>;
+  try {
+    tokenResult = await bootstrap({ kyaJwt, clientId, clientSecret });
+  } catch (err) {
+    recordPolicyEvent({
+      kind: "hydra_bootstrap",
+      data: { ok: false, cacheHit: false, bridgeClientId: clientId, errorCode: "bootstrap_failed", durationMs: Date.now() - bootstrapStart },
+    });
+    throw err;
+  }
+  recordPolicyEvent({
+    kind: "hydra_bootstrap",
+    data: { ok: true, cacheHit: false, bridgeClientId: clientId, durationMs: Date.now() - bootstrapStart },
   });
 
   // 3. Decode the token's claims so the caller can drop them straight into
   //    validateAndCharge's ctx — same shape as the Phase 7 Hydra-bearer path.
+  const introspectStart = Date.now();
   const introspectResult = await introspectAgentToken(tokenResult.access_token, {
     introspect: deps.introspect,
   });
   if (!introspectResult.ok) {
+    recordPolicyEvent({
+      kind: "hydra_introspect",
+      data: { ok: false, errorCode: introspectResult.code, durationMs: Date.now() - introspectStart },
+    });
     throw new Error(
       `skyfire-bridge: bootstrap token failed introspection (${introspectResult.code}): ${introspectResult.message}`,
     );
   }
   if (!introspectResult.delegated) {
+    recordPolicyEvent({
+      kind: "hydra_introspect",
+      data: { ok: false, active: true, errorCode: "missing_act_claim", durationMs: Date.now() - introspectStart },
+    });
     throw new Error(
       "skyfire-bridge: bootstrap token introspected as non-delegated (missing act claim). " +
         "Verify /oauth/consent stamps act.sub correctly.",
     );
   }
+  recordPolicyEvent({
+    kind: "hydra_introspect",
+    data: {
+      ok: true,
+      active: true,
+      sub: introspectResult.claims.sub,
+      actSub: introspectResult.claims.act.sub,
+      authorizationDetails: introspectResult.claims.authorization_details.length,
+      durationMs: Date.now() - introspectStart,
+    },
+  });
 
   const result: SkyfireBridgeResult = {
     ownerUserId,

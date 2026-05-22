@@ -101,7 +101,10 @@ export default async function OrderDetailPage({
           chargeId={order.skyfireChargeId}
         />
       )}
-      <DebugPolicyPanel checks={checks} />
+      <DebugPolicyPanel
+        checks={checks}
+        events={order.policyEventsJson ? JSON.parse(order.policyEventsJson) : []}
+      />
     </div>
   );
 }
