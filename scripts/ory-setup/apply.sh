@@ -3,18 +3,73 @@ set -euo pipefail
 
 # scripts/ory-setup/apply.sh
 # Idempotently applies all Ory project configuration committed to this repo.
+#
+# Fresh-clone path: if no .env.local exists (or ORY_PROJECT_ID isn't set),
+# the script will create a new Ory Network project for you, write the
+# project_id / sdk_url to .env.local, then proceed with schemas / namespaces
+# / Hydra config / return URLs / bridge client. End-to-end this gets a
+# Skyfire engineer from `git clone` to "Flow 7 ready" in one command,
+# assuming they've already run `ory auth` once against their account.
 
-if [[ -f .env.local ]]; then
-  set -a; source .env.local; set +a
+DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${DIR}/../.." && pwd)"
+ENV_FILE="${REPO_ROOT}/.env.local"
+
+if [[ -f "${ENV_FILE}" ]]; then
+  set -a; source "${ENV_FILE}"; set +a
 fi
 
-: "${ORY_PROJECT_ID:?ORY_PROJECT_ID is required (set in .env.local)}"
+# Verify the operator has authed the CLI once. We use `ory list workspaces`
+# as the cheapest authed call; it errors if the token is missing/expired.
+if ! ory list workspaces --format json >/dev/null 2>&1; then
+  echo "✗ ory CLI is not authenticated."
+  echo "  Run \`ory auth\` once to log in against your Ory account, then re-run this script."
+  exit 1
+fi
+
+# Fresh-tenant path: no project id → create one.
+if [[ -z "${ORY_PROJECT_ID:-}" ]]; then
+  DEFAULT_NAME="skyfire-merchant-demo-$(whoami)-$(date +%Y%m%d)"
+  PROJECT_NAME="${ORY_PROJECT_NAME:-${DEFAULT_NAME}}"
+  echo "No ORY_PROJECT_ID found. Creating a new Ory Network project: ${PROJECT_NAME}"
+
+  CREATE_OUT=$(ory create project --name "${PROJECT_NAME}" --format json)
+  ORY_PROJECT_ID=$(echo "${CREATE_OUT}" | jq -r '.id')
+  ORY_SDK_URL=$(echo "${CREATE_OUT}" | jq -r '.slug + ".projects.oryapis.com"')
+  ORY_SDK_URL="https://${ORY_SDK_URL}"
+
+  echo "  → project_id: ${ORY_PROJECT_ID}"
+  echo "  → sdk_url:    ${ORY_SDK_URL}"
+
+  # Persist to .env.local so future runs of pnpm dev / scripts see them.
+  # Create the file if it doesn't exist; otherwise append the two lines.
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    touch "${ENV_FILE}"
+  fi
+  {
+    echo ""
+    echo "# Auto-written by scripts/ory-setup/apply.sh on $(date +%Y-%m-%d)"
+    echo "ORY_PROJECT_ID=${ORY_PROJECT_ID}"
+    echo "ORY_SDK_URL=${ORY_SDK_URL}"
+  } >> "${ENV_FILE}"
+  echo "  → wrote ORY_PROJECT_ID and ORY_SDK_URL to ${ENV_FILE}"
+
+  # Remind the operator that they still need an admin API key for the
+  # server-side admin calls — that one we can't create via the CLI here,
+  # they have to mint it in the dashboard.
+  if [[ -z "${ORY_ADMIN_API_KEY:-}" ]]; then
+    echo "  ⚠ ORY_ADMIN_API_KEY is required for server-side admin calls"
+    echo "    (Kratos identity creation, Hydra client management, e2e fixtures)."
+    echo "    Mint one at: https://console.ory.sh/projects/${ORY_PROJECT_ID}/developers"
+    echo "    and add ORY_ADMIN_API_KEY=… to ${ENV_FILE} before running pnpm dev."
+  fi
+
+  export ORY_PROJECT_ID ORY_SDK_URL
+fi
 
 echo "Confirming ory CLI sees project ${ORY_PROJECT_ID}..."
 ory get project "${ORY_PROJECT_ID}" --format json > /dev/null
 echo "  → OK"
-
-DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "Uploading user + agent identity schemas..."
 # Ory Network stores uploaded schemas in GCS and assigns a content-hash as the schema ID.

@@ -261,20 +261,33 @@ pnpm db:seed
 
 ### 3. Ory project configuration
 
-The Ory project (`f5798507-b1c0-4168-9fd8-7eeb7a40d75c`, name `SkyfireOryDemo`) is **already configured**; testers don't need to touch it. The source of truth lives in `scripts/ory-setup/`:
+**Two paths — pick one:**
 
-- `identity-schemas/user.schema.json` + `agent.schema.json` — Kratos schemas
-- `keto-namespaces/namespaces.ts` — Keto OPL
-- `hydra-config.sh` — Hydra Login/Consent URLs (must point at `http://localhost:4000/oauth/login` + `/oauth/consent` when running via the tunnel; **not** at `http://localhost:3000` directly — that breaks the cookie domain)
-- `return-urls.sh` — Account Experience post-login redirect URLs
+#### A. Use the demo project (fastest, joining the maintainers' tenant)
 
-To re-apply config (project owner only):
+The shared Ory project (`f5798507-b1c0-4168-9fd8-7eeb7a40d75c`, name `SkyfireOryDemo`) is **already configured**. You just need an admin API key (Project Settings → API Keys in the Ory console) in `.env.local` as `ORY_ADMIN_API_KEY`. Skip ahead to "Run."
+
+#### B. Stand up your own Ory tenant (recommended for forks)
+
+One command, assuming the `ory` CLI is installed and you've run `ory auth` once:
 
 ```bash
 ./scripts/ory-setup/apply.sh
 ```
 
-`apply.sh` is idempotent; existing identities and tuples are preserved.
+What `apply.sh` does on a fresh clone:
+
+1. Creates a new Ory Network project named `skyfire-merchant-demo-<user>-<date>` (override with `ORY_PROJECT_NAME=…`).
+2. Writes the new `ORY_PROJECT_ID` and `ORY_SDK_URL` to `.env.local`.
+3. Uploads the Kratos identity schemas (`user.schema.json`, `agent.schema.json`).
+4. Configures Keto namespaces from `keto-namespaces/namespaces.ts`.
+5. Sets Hydra Login/Consent URLs + Account Experience return URLs.
+6. Provisions the `skyfire-bridge` OAuth2 client and prints its `client_id` + `client_secret` for you to paste into `.env.local`.
+7. Prints a Flow 7 readiness check at the end so you know what env vars (if any) are still missing.
+
+The script is idempotent; existing identities and tuples are preserved on re-runs. You'll still need to mint an `ORY_ADMIN_API_KEY` in the dashboard for server-side admin calls (the CLI can create the project but not the API key).
+
+Source of truth for the config lives in `scripts/ory-setup/` — see those files for what each step is doing.
 
 ## Run (REQUIRED: Ory Tunnel)
 
