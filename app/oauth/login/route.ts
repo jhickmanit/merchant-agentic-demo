@@ -57,6 +57,49 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "agent_revoked" }, { status: 403 });
   }
 
+  // 3a. Phase 10 — client_id↔agent binding check. Two valid combos:
+  //   (a) Pre-registered agent (Phase 7): agents.hydraClientId === requesting client_id.
+  //   (b) Skyfire-attested auto-provisioned (Phase 9/10): agents.hydraClientId is the
+  //       "skyfire-attested" sentinel; the requesting client_id MUST be the bridge.
+  // Rejecting the cross-product prevents a pre-registered agent's client from
+  // bootstrapping a token on behalf of an auto-provisioned Skyfire agent (or
+  // vice versa).
+  try {
+    const challenge = await oauth2Admin.getOAuth2LoginRequest({ loginChallenge });
+    const requestingClientId = challenge.data.client?.client_id;
+    const bridgeClientId = process.env.SKYFIRE_BRIDGE_CLIENT_ID;
+    if (agentRow.hydraClientId === "skyfire-attested") {
+      if (!bridgeClientId || requestingClientId !== bridgeClientId) {
+        return NextResponse.json(
+          {
+            error: "client_binding_mismatch",
+            message:
+              "Skyfire-attested agents may only bootstrap through the skyfire-bridge Hydra client",
+            agentId: agentRow.id,
+            requestingClientId,
+          },
+          { status: 403 },
+        );
+      }
+    } else if (requestingClientId !== agentRow.hydraClientId) {
+      return NextResponse.json(
+        {
+          error: "client_binding_mismatch",
+          message: "Requesting client_id does not match the agent's registered Hydra client",
+          agentId: agentRow.id,
+          requestingClientId,
+          expected: agentRow.hydraClientId,
+        },
+        { status: 403 },
+      );
+    }
+  } catch (err) {
+    return NextResponse.json(
+      { error: "hydra_challenge_lookup_failed", message: (err as Error).message },
+      { status: 502 },
+    );
+  }
+
   // 4. Look up the owner — must exist, and hid.email must match.
   const { identity } = getAuth();
   const owner = await identity.getById(agentRow.ownerUserId);
