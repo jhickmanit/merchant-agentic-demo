@@ -5,7 +5,6 @@ import { getDb } from "@/db";
 import { getCartWithItems } from "@/lib/cart";
 import { getAuth } from "@/lib/auth";
 import { buildSessionRequest } from "@/lib/auth/request";
-import { ThemeToggle } from "./theme-toggle";
 import { AuthButton } from "./auth-button";
 import { Button } from "@/components/ui/button";
 
@@ -41,7 +40,6 @@ export async function Header() {
           <Link href="/orders" className="text-sm text-muted-foreground hover:text-foreground">
             Orders
           </Link>
-          <ThemeToggle />
           <AuthButton user={user} />
           <Link href="/cart">
             <Button variant="default" size="sm">

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/header";
 import "./globals.css";
 
@@ -12,16 +11,17 @@ export const metadata: Metadata = {
   description: "Ory × Skyfire KYAPay reference integration.",
 };
 
+// Forcing light mode (no ThemeProvider) so the merchant UI matches Ory's
+// hosted Account Experience, which doesn't yet support a dark theme. Once
+// that lands upstream we can re-introduce the toggle.
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <Header />
-          <main className="flex-1">{children}</main>
-        </ThemeProvider>
+        <Header />
+        <main className="flex-1">{children}</main>
       </body>
     </html>
   );
