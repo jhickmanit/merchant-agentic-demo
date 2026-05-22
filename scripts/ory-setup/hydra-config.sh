@@ -59,3 +59,64 @@ fi
 echo "  → Login URL: ${LOGIN_URL}"
 echo "  → Consent URL: ${CONSENT_URL}"
 echo "  → Token Hook URL: ${TOKEN_HOOK_URL} (supported: ${HOOK_ACTUAL})"
+
+# ---------------------------------------------------------------------------
+# Phase 10: skyfire-bridge OAuth2 client
+# A single shared Hydra client used by EVERY auto-provisioned Skyfire-attested
+# agent to bootstrap a delegated access token. Per-agent Hydra clients would
+# be redundant — KYA already attests the agent identity; the per-agent value
+# lives in the issued token's `act.sub` claim instead.
+# ---------------------------------------------------------------------------
+
+BRIDGE_NAME="skyfire-bridge"
+BRIDGE_REDIRECT_URI="${MERCHANT_BASE_URL:-http://localhost:3000}/api/oauth/bootstrap-callback"
+
+echo
+echo "  Provisioning skyfire-bridge OAuth2 client…"
+
+# `ory list oauth2-clients` doesn't filter by name natively; pull the full list
+# and grep client_name. Idempotent: skip creation if a client with this name
+# already exists.
+EXISTING=$(ory list oauth2-clients --project "${ORY_PROJECT_ID}" --format json 2>/dev/null \
+  | python3 -c "
+import sys, json
+try:
+    data = json.loads(sys.stdin.read())
+    items = data.get('items', data) if isinstance(data, dict) else data
+    for c in items or []:
+        if c.get('client_name') == '${BRIDGE_NAME}':
+            print(c.get('client_id', ''))
+            break
+except Exception:
+    pass
+" 2>/dev/null || true)
+
+if [[ -n "${EXISTING}" ]]; then
+  echo "  → skyfire-bridge already exists: client_id=${EXISTING}"
+  echo "  → If you need the client_secret, re-create the client (it's only shown once)."
+  BRIDGE_CLIENT_ID="${EXISTING}"
+  BRIDGE_CLIENT_SECRET=""
+else
+  CREATED=$(ory create oauth2-client --project "${ORY_PROJECT_ID}" \
+    --name "${BRIDGE_NAME}" \
+    --grant-type authorization_code,refresh_token \
+    --response-type code \
+    --token-endpoint-auth-method client_secret_basic \
+    --redirect-uri "${BRIDGE_REDIRECT_URI}" \
+    --scope "offline_access openid" \
+    --format json)
+
+  BRIDGE_CLIENT_ID=$(echo "${CREATED}" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['client_id'])")
+  BRIDGE_CLIENT_SECRET=$(echo "${CREATED}" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('client_secret', ''))")
+
+  echo "  → skyfire-bridge created."
+  echo
+  echo "  ┌─────────────────────────────────────────────────────────────────┐"
+  echo "  │ Copy these into .env.local — the secret is shown only ONCE:     │"
+  echo "  ├─────────────────────────────────────────────────────────────────┤"
+  echo "  │ SKYFIRE_BRIDGE_CLIENT_ID=${BRIDGE_CLIENT_ID}"
+  echo "  │ SKYFIRE_BRIDGE_CLIENT_SECRET=${BRIDGE_CLIENT_SECRET}"
+  echo "  └─────────────────────────────────────────────────────────────────┘"
+fi
+
+echo "  → skyfire-bridge client_id: ${BRIDGE_CLIENT_ID}"
