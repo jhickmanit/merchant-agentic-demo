@@ -55,3 +55,25 @@ echo "Configuring Hydra (Login/Consent/Token-Hook URLs)..."
 echo "  → OK"
 
 echo "All Ory project configuration applied."
+
+# Sanity-check Flow 7's prerequisites and remind the operator if anything's
+# missing. apply.sh is the natural place for this because hydra-config.sh
+# prints the bridge client creds inline — easy to miss if the operator looks
+# only at the final line of output.
+echo
+echo "Flow 7 (Skyfire + Hydra delegation) readiness check:"
+
+MISSING=()
+[[ -z "${SKYFIRE_BRIDGE_CLIENT_ID:-}" ]] && MISSING+=("SKYFIRE_BRIDGE_CLIENT_ID")
+[[ -z "${SKYFIRE_BRIDGE_CLIENT_SECRET:-}" ]] && MISSING+=("SKYFIRE_BRIDGE_CLIENT_SECRET")
+[[ -z "${KYAPAY_PROVIDER:-}" || "${KYAPAY_PROVIDER:-}" != "skyfire" ]] && MISSING+=("KYAPAY_PROVIDER=skyfire")
+[[ -z "${SKYFIRE_BUYER_API_KEY:-}" ]] && MISSING+=("SKYFIRE_BUYER_API_KEY")
+
+if [[ ${#MISSING[@]} -eq 0 ]]; then
+  echo "  ✓ All Flow 7 env vars present. Run \`pnpm dev\` + \`ory tunnel\` and hit /api/checkout with a Skyfire KYA."
+else
+  echo "  ⚠ Missing in .env.local:"
+  for var in "${MISSING[@]}"; do echo "      - ${var}"; done
+  echo "  → Flow 7 will fall back to Flow 6 behavior (auto-provision, no Hydra delegation) until these are set."
+  echo "  → For SKYFIRE_BRIDGE_CLIENT_ID/SECRET: scroll up to the 'skyfire-bridge created' banner above (secret is shown only once)."
+fi
