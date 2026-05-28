@@ -213,6 +213,35 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // MCP handshake methods (needed by MCP Inspector / MCP clients).
+  if (body.method === "initialize") {
+    const ok: JsonRpcOk = {
+      jsonrpc: "2.0",
+      id: body.id ?? null,
+      result: {
+        protocolVersion: "2024-11-05",
+        serverInfo: {
+          name: "merchant-agentic-demo-mcp",
+          version: "0.1.0",
+        },
+        capabilities: {
+          tools: {},
+        },
+      },
+    };
+    return NextResponse.json(ok);
+  }
+
+  if (body.method === "notifications/initialized") {
+    // JSON-RPC notification (no response body required)
+    return new NextResponse(null, { status: 204 });
+  }
+
+  if (body.method === "ping") {
+    const ok: JsonRpcOk = { jsonrpc: "2.0", id: body.id ?? null, result: {} };
+    return NextResponse.json(ok);
+  }
+
   // 3. Resolve a persistent cart for this agent. The cart id is deterministic
   //    so the same agent accumulates items across multiple MCP requests.
   //    After submitCart, createOrderFromCart clears the items, so the next

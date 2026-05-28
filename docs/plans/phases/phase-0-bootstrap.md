@@ -649,9 +649,9 @@ SKYFIRE_API_KEY=
 # Local SQLite
 DATABASE_URL=./local.db
 
-# Provider selection (memory for tests, ory for dev/staging/prod)
+# Provider selection (mock for demo, skyfire for real KYA tokens)
 AUTH_PROVIDER=ory
-KYAPAY_PROVIDER=memory
+KYAPAY_PROVIDER=mock
 ```
 
 - [ ] **Step 2: Create `.env.local` (gitignored)**
@@ -664,7 +664,7 @@ ORY_ADMIN_API_KEY=
 SKYFIRE_API_KEY=
 DATABASE_URL=./local.db
 AUTH_PROVIDER=ory
-KYAPAY_PROVIDER=memory
+KYAPAY_PROVIDER=mock
 ```
 
 Note: The user (Jeff) will paste their admin API key into `ORY_ADMIN_API_KEY` himself. **Do not read `.env.local` after creation** — it contains secrets.

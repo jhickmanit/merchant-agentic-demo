@@ -73,10 +73,12 @@ KYAPAY_PROVIDER=skyfire
 SKYFIRE_BUYER_API_KEY=<your Skyfire buyer-agent API key>
 ```
 
+Note: SKYFIRE_BUYER_API_KEY should correspond to a user part of an organization in Skyfire to be able to create tokens for external sellers (using sellerDomainOrUrl)
+
 Then exercise Flow 7:
 
 ```bash
-pnpm skyfire:mint-kya --sellerDomain http://localhost:3000   # prints a signed JWT
+pnpm skyfire:mint-kya --sellerDomain <your-registered-seller-domain>   # prints a signed JWT
 curl -X POST http://localhost:3000/api/checkout \
   -H "skyfire-pay-id: <jwt>" -H "X-Cart-Id: <cart>"
 ```
@@ -493,6 +495,8 @@ AGENT_TOKEN=$(pnpm demo:mint-agent-token | tail -1) \
   pnpm demo:agent-mcp --agent <agent-id> --user-email <your-email>
 ```
 
+Note: <agent-id> is the value of **id** in agent-<id> from Ory dashboard (OAuth2 clients list)
+
 The MCP demo agent lists tools, browses, adds to cart, views cart, mints a KYA token for the exact cart total, submits, and gets HTTP 200 + an order id. Visit `/orders/<id>` to see the Mandate panel.
 
 ### Validation matrix
@@ -525,9 +529,12 @@ SKYFIRE_BUYER_API_KEY=<your buyer agent api key>
 Mint a real KYA token for manual /charge testing:
 
 ```bash
-pnpm skyfire:mint-kya --sellerDomain http://localhost:3000
+pnpm skyfire:mint-kya --sellerDomain <your-registered-seller-domain>
 # prints the JWT to stdout
 ```
+
+`localhost` (and `127.0.0.1`) are not accepted by Skyfire's token-mint API for real KYA tokens.
+Use a public seller domain registered for your Skyfire seller account.
 
 Real Skyfire KYA tokens carry identity only (no `amount`/`cur`). The merchant uses the cart total as the charge amount; identity verification (`hid.email` matches the owner, `sub` matches the bound agent) still gates the charge.
 
