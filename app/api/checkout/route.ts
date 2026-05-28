@@ -56,9 +56,9 @@ async function handleAgentCheckout(kyaToken: string, body: CheckoutBody) {
   const hs = await headers();
   const agentResult = await verifyAgentBearer(getDb(), hs.get("authorization"));
   const store = await cookies();
-  // Agents may supply the cart id via the `X-Cart-Id` header (Bose-style,
-  // no cookie jar) or via the standard `cart_id` cookie (browser-shared).
-  // Header wins so curl-driven demos work without copying the cookie.
+  // Agents may supply the cart id via the `X-Cart-Id` header
+  // or via the standard `cart_id` cookie.
+  // Header wins so curl-driven demos work without the cookie.
   const headerCartId = parseCartIdFromCookie(hs.get("x-cart-id") ?? undefined);
   const cookieCartId = parseCartIdFromCookie(store.get(CART_COOKIE_NAME)?.value);
   const cartId = headerCartId ?? cookieCartId;
