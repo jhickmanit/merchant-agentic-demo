@@ -13,7 +13,7 @@ function arg(name: string, fallback?: string): string | undefined {
 }
 
 async function main() {
-  const agentId = arg("agent");
+  const agentId = arg("agent"); //agent-<id> from Ory dashboard (OAuth2 clients list) 
   const agentName = arg("agent-name");
   const userEmail = arg("user-email");
   const amountCents = parseInt(arg("amount-cents", "5000")!, 10);
